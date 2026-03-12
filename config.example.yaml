@@ -1,0 +1,28 @@
+psa:
+  provider: mock  # Options: superops, mock (change to "superops" for live data)
+  superops:
+    api_url: https://api.superops.ai/msp
+    api_token: YOUR_API_TOKEN_HERE
+    subdomain: integotec
+  halopsa:  # Pre-stub for future use
+    api_url: https://INSTANCE.halopsa.com/api
+    client_id: YOUR_CLIENT_ID
+    client_secret: YOUR_CLIENT_SECRET
+
+sync:
+  interval_minutes: 15
+  full_sync_on_first_run: true
+
+database:
+  path: ./data/metrics.db
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+thresholds:
+  stale_ticket_days: 3
+  sla_warning_minutes: 30
+  max_tickets_per_tech: 20
+  utilization_target_min: 60
+  utilization_target_max: 85
