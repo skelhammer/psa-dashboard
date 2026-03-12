@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { useSyncStatus, useTriggerSync } from '../api/hooks'
+import { useSyncStatus, useTriggerSync, useTriggerFullSync } from '../api/hooks'
 import clsx from 'clsx'
 
 const navItems = [
@@ -13,6 +13,8 @@ const navItems = [
 export default function Layout() {
   const { data: syncStatus } = useSyncStatus()
   const triggerSync = useTriggerSync()
+  const triggerFullSync = useTriggerFullSync()
+  const anySyncing = triggerSync.isPending || triggerFullSync.isPending || syncStatus?.is_syncing
 
   const lastSync = syncStatus?.last_sync
     ? new Date(syncStatus.last_sync).toLocaleTimeString()
@@ -72,15 +74,27 @@ export default function Layout() {
             </span>
             <button
               onClick={() => triggerSync.mutate()}
-              disabled={triggerSync.isPending || syncStatus?.is_syncing}
+              disabled={anySyncing}
               className={clsx(
                 'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                triggerSync.isPending || syncStatus?.is_syncing
+                anySyncing
                   ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
                   : 'bg-brand-gold/10 text-brand-gold border border-brand-gold/30 hover:bg-brand-gold/20'
               )}
             >
               {triggerSync.isPending ? 'Syncing...' : 'Sync Now'}
+            </button>
+            <button
+              onClick={() => triggerFullSync.mutate()}
+              disabled={anySyncing}
+              className={clsx(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                anySyncing
+                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                  : 'bg-gray-700/50 text-gray-400 border border-gray-600/30 hover:bg-gray-700 hover:text-gray-300'
+              )}
+            >
+              {triggerFullSync.isPending ? 'Full Syncing...' : 'Full Sync'}
             </button>
           </div>
         </header>

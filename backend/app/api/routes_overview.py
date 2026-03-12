@@ -37,6 +37,9 @@ def _build_filter_sql(filters: FilterParams, prefix: str = "") -> tuple[str, lis
     if filters.category:
         conditions.append(f"{col}category = ?")
         params.append(filters.category)
+    if filters.tech_group:
+        conditions.append(f"COALESCE({col}tech_group_name, 'Tier 1 Support') = ?")
+        params.append(filters.tech_group)
 
     return " AND ".join(conditions), params
 

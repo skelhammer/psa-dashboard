@@ -52,6 +52,9 @@ async def billing_flags(
     if filters.priority:
         conditions.append("t.priority = ?")
         params.append(filters.priority)
+    if filters.tech_group:
+        conditions.append("COALESCE(t.tech_group_name, 'Tier 1 Support') = ?")
+        params.append(filters.tech_group)
 
     where = " AND ".join(conditions)
 

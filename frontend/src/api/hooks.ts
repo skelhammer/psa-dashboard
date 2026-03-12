@@ -20,6 +20,16 @@ export function useTriggerSync() {
   })
 }
 
+export function useTriggerFullSync() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/sync/full').then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries()
+    },
+  })
+}
+
 // Filters
 export function useFilters() {
   return useQuery({

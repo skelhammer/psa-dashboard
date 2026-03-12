@@ -29,6 +29,9 @@ async def get_filter_options(request: Request):
     priorities = await conn.execute_fetchall(
         "SELECT DISTINCT priority FROM tickets ORDER BY priority"
     )
+    groups = await conn.execute_fetchall(
+        "SELECT DISTINCT COALESCE(tech_group_name, 'Tier 1 Support') as grp FROM tickets ORDER BY grp"
+    )
 
     return {
         "clients": [{"id": r["id"], "name": r["name"]} for r in clients],
@@ -39,6 +42,7 @@ async def get_filter_options(request: Request):
         "categories": [r["category"] for r in categories],
         "statuses": [r["status"] for r in statuses],
         "priorities": [r["priority"] for r in priorities],
+        "groups": [r["grp"] for r in groups],
     }
 
 

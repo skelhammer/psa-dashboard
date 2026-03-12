@@ -31,9 +31,12 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
     if filters.priority:
         extra_and += " AND priority = ?"
         extra_params.append(filters.priority)
+    if filters.tech_group:
+        extra_and += " AND COALESCE(tech_group_name, 'Tier 1 Support') = ?"
+        extra_params.append(filters.tech_group)
 
     # For joined queries (t. prefix)
-    extra_and_t = extra_and.replace("client_id", "t.client_id").replace("priority", "t.priority")
+    extra_and_t = extra_and.replace("client_id", "t.client_id").replace("priority", "t.priority").replace("tech_group_name", "t.tech_group_name")
 
     stale_days_row = await conn.execute_fetchall(
         "SELECT value FROM dashboard_config WHERE key = 'stale_ticket_threshold_days'"

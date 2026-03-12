@@ -97,7 +97,18 @@ export default function GlobalFilters() {
         ))}
       </select>
 
-      {(filters.clientId || filters.technicianId || filters.priority || filters.status || filters.dateRange === 'custom') && (
+      <select
+        value={filters.techGroup}
+        onChange={e => setFilter('techGroup', e.target.value)}
+        className={selectClass}
+      >
+        <option value="">All Groups</option>
+        {data?.groups?.map((g: string) => (
+          <option key={g} value={g}>{g}</option>
+        ))}
+      </select>
+
+      {(filters.clientId || filters.technicianId || filters.priority || filters.techGroup || filters.status || filters.dateRange === 'custom') && (
         <button
           onClick={resetFilters}
           className="text-xs text-gray-500 hover:text-gray-300 underline"

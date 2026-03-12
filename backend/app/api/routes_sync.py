@@ -25,6 +25,14 @@ async def trigger_sync(request: Request):
     return result
 
 
+@router.post("/sync/full")
+async def trigger_full_sync(request: Request):
+    """Trigger a full sync that re-fetches all tickets and removes deleted ones."""
+    scheduler = request.app.state.scheduler
+    result = await scheduler.trigger_full_sync()
+    return result
+
+
 @router.get("/sync/status")
 async def sync_status(request: Request):
     scheduler = request.app.state.scheduler

@@ -33,10 +33,14 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div>
         <h2 className="text-xl font-bold">Overview</h2>
-        <GlobalFilters />
+        <p className="text-sm text-gray-500 mt-1">
+          KPIs, volume trends, backlog tracking, and workload balance at a glance.
+        </p>
       </div>
+
+      <GlobalFilters />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">

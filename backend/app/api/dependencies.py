@@ -27,12 +27,14 @@ class FilterParams:
         priority: str | None = Query(None),
         status: str | None = Query(None),
         category: str | None = Query(None),
+        tech_group: str | None = Query(None),
     ):
         self.client_id = client_id
         self.technician_id = technician_id
         self.priority = priority
         self.status = status
         self.category = category
+        self.tech_group = tech_group
         self.date_range_key = date_range
 
         tz = _get_tz()
@@ -144,6 +146,9 @@ def build_where_clause(filters: FilterParams, prefix: str = "", include_date: bo
     if filters.category:
         conditions.append(f"{col_prefix}category = ?")
         params.append(filters.category)
+    if filters.tech_group:
+        conditions.append(f"COALESCE({col_prefix}tech_group_name, 'Tier 1 Support') = ?")
+        params.append(filters.tech_group)
 
     if conditions:
         return "WHERE " + " AND ".join(conditions), params

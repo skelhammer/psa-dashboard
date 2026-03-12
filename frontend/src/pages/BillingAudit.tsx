@@ -51,8 +51,11 @@ export default function BillingAudit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div>
         <h2 className="text-xl font-bold">Billing Audit</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Flags for billable client tickets missing worklogs, with per-client summaries.
+        </p>
       </div>
 
       <GlobalFilters />

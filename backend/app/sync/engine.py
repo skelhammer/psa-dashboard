@@ -89,8 +89,14 @@ class SyncEngine:
 
             # Sync all tickets (paginate through all)
             try:
-                tickets_synced = await self._sync_all_tickets(conn)
+                tickets_synced, synced_ids = await self._sync_all_tickets(conn)
                 logger.info("Synced %d tickets", tickets_synced)
+
+                # Remove tickets that no longer exist in PSA (trashed/deleted)
+                if synced_ids:
+                    deleted = await self._remove_missing_tickets(conn, synced_ids)
+                    if deleted:
+                        logger.info("Removed %d deleted/trashed tickets", deleted)
             except Exception as e:
                 msg = f"Failed to sync tickets: {e}"
                 logger.error(msg)
@@ -158,8 +164,17 @@ class SyncEngine:
         await conn.commit()
 
         try:
-            tickets_synced = await self._sync_all_tickets(conn, updated_since=self._last_sync_time)
+            tickets_synced, _ = await self._sync_all_tickets(conn, updated_since=self._last_sync_time)
             await conn.commit()
+
+            # Prune open tickets that were deleted/trashed in PSA
+            try:
+                pruned = await self._prune_deleted_open_tickets(conn)
+                if pruned:
+                    await conn.commit()
+                    logger.info("Pruned %d deleted/trashed open tickets", pruned)
+            except Exception as e:
+                logger.warning("Open ticket pruning failed (non-fatal): %s", e)
 
             await run_post_sync_hooks(conn, self.provider)
             await conn.commit()
@@ -191,10 +206,14 @@ class SyncEngine:
             "errors": errors,
         }
 
-    async def _sync_all_tickets(self, conn: aiosqlite.Connection, updated_since: datetime | None = None) -> int:
-        """Fetch and upsert all tickets, paginating through results."""
+    async def _sync_all_tickets(self, conn: aiosqlite.Connection, updated_since: datetime | None = None) -> tuple[int, set[str]]:
+        """Fetch and upsert all tickets, paginating through results.
+
+        Returns (count, set_of_synced_ids).
+        """
         page = 1
         total = 0
+        synced_ids: set[str] = set()
         max_pages = 100
 
         while page <= max_pages:
@@ -207,13 +226,94 @@ class SyncEngine:
 
             for ticket in result.items:
                 await self._upsert_ticket(conn, ticket)
+                synced_ids.add(ticket.id)
                 total += 1
 
             if not result.has_more:
                 break
             page += 1
 
-        return total
+        return total, synced_ids
+
+    async def _remove_missing_tickets(self, conn: aiosqlite.Connection, synced_ids: set[str]) -> int:
+        """Delete local tickets that were not returned by a full sync (trashed/deleted in PSA)."""
+        rows = await conn.execute_fetchall("SELECT id FROM tickets")
+        local_ids = {row["id"] for row in rows}
+        missing = local_ids - synced_ids
+
+        if missing:
+            placeholders = ",".join("?" for _ in missing)
+            await conn.execute(
+                f"DELETE FROM billing_flags WHERE ticket_id IN ({placeholders})",
+                list(missing),
+            )
+            await conn.execute(
+                f"DELETE FROM tickets WHERE id IN ({placeholders})",
+                list(missing),
+            )
+            logger.info("Removed %d tickets no longer in PSA: %s", len(missing),
+                        [m for m in list(missing)[:10]])
+
+        return len(missing)
+
+    async def _prune_deleted_open_tickets(self, conn: aiosqlite.Connection) -> int:
+        """Check locally-open tickets against PSA and remove any that no longer exist.
+
+        Only checks open tickets (small set), so this is fast.
+        Returns the number of tickets pruned.
+        """
+        open_statuses = ('Open', 'Customer Replied', 'Under Investigation', 'On Hold',
+                         'Waiting on Customer', 'Waiting on third party', 'Waiting on Order', 'Scheduled')
+        placeholders = ",".join("?" for _ in open_statuses)
+        local_open = await conn.execute_fetchall(
+            f"SELECT id FROM tickets WHERE status IN ({placeholders})",
+            list(open_statuses),
+        )
+        if not local_open:
+            return 0
+
+        local_open_ids = {row["id"] for row in local_open}
+
+        # Fetch all open tickets from PSA (just IDs)
+        remote_open_ids: set[str] = set()
+        page = 1
+        while page <= 20:
+            filters = TicketFilter(
+                page=page,
+                page_size=100,
+                exclude_statuses=list(CLOSED_STATUSES),
+            )
+            result = await self.provider.get_tickets(filters)
+            for ticket in result.items:
+                remote_open_ids.add(ticket.id)
+            if not result.has_more:
+                break
+            page += 1
+
+        # Safety check: if remote returned very few tickets compared to local,
+        # something might be wrong with the API. Skip pruning.
+        if len(remote_open_ids) < len(local_open_ids) * 0.5 and len(local_open_ids) > 10:
+            logger.warning(
+                "Skipping open ticket pruning: remote has %d open vs %d local. Possible API issue.",
+                len(remote_open_ids), len(local_open_ids),
+            )
+            return 0
+
+        missing = local_open_ids - remote_open_ids
+        if missing:
+            placeholders = ",".join("?" for _ in missing)
+            await conn.execute(
+                f"DELETE FROM billing_flags WHERE ticket_id IN ({placeholders})",
+                list(missing),
+            )
+            await conn.execute(
+                f"DELETE FROM tickets WHERE id IN ({placeholders})",
+                list(missing),
+            )
+            logger.info("Pruned %d open tickets no longer in PSA: %s",
+                        len(missing), [m for m in list(missing)[:10]])
+
+        return len(missing)
 
     async def _upsert_ticket(self, conn: aiosqlite.Connection, ticket: Ticket):
         """Insert or update a ticket in the database."""

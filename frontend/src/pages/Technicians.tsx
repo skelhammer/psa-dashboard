@@ -25,7 +25,12 @@ export default function Technicians() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold">Technician Performance</h2>
+      <div>
+        <h2 className="text-xl font-bold">Technician Performance</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Per-tech metrics including response times, worklog hours, utilization, and SLA compliance.
+        </p>
+      </div>
 
       <GlobalFilters />
 

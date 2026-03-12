@@ -9,6 +9,7 @@ interface FilterState {
   priority: string
   status: string
   category: string
+  techGroup: string
 }
 
 interface FilterContextType {
@@ -27,6 +28,7 @@ const defaults: FilterState = {
   priority: '',
   status: '',
   category: '',
+  techGroup: '',
 }
 
 const FilterContext = createContext<FilterContextType | null>(null)
@@ -54,6 +56,7 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     if (filters.priority) params.priority = filters.priority
     if (filters.status) params.status = filters.status
     if (filters.category) params.category = filters.category
+    if (filters.techGroup) params.tech_group = filters.techGroup
     return params
   }
 

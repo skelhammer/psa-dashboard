@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 
 from app.sync.engine import SyncEngine
 
@@ -42,6 +43,10 @@ class SyncScheduler:
             return await self.engine.full_sync()
         return await self.engine.incremental_sync()
 
+    async def trigger_full_sync(self) -> dict:
+        """Trigger an immediate full sync (re-fetches all tickets, cleans up deleted)."""
+        return await self.engine.full_sync()
+
     async def _loop(self):
         """Background loop that runs sync at configured intervals."""
         # Run initial sync immediately
@@ -57,9 +62,17 @@ class SyncScheduler:
                 await asyncio.sleep(self.interval_minutes * 60)
                 if not self._running:
                     break
-                logger.info("Running scheduled incremental sync...")
-                result = await self.engine.incremental_sync()
-                logger.info("Scheduled sync result: %s", result)
+
+                # Run a full sync at midnight to clean up deleted tickets
+                now = datetime.now()
+                if now.hour == 0 and now.minute < self.interval_minutes:
+                    logger.info("Running nightly full sync...")
+                    result = await self.engine.full_sync()
+                    logger.info("Nightly full sync result: %s", result)
+                else:
+                    logger.info("Running scheduled incremental sync...")
+                    result = await self.engine.incremental_sync()
+                    logger.info("Scheduled sync result: %s", result)
             except asyncio.CancelledError:
                 break
             except Exception as e:

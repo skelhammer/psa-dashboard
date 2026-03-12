@@ -100,6 +100,7 @@ async def work_queue(
     technician_id: str | None = Query(None),
     priority: str | None = Query(None),
     status: str | None = Query(None),
+    tech_group: str | None = Query(None),
     unassigned_only: bool = Query(False),
 ):
     """Get prioritized work queue of open tickets."""
@@ -121,6 +122,9 @@ async def work_queue(
     if status:
         conditions.append("status = ?")
         params.append(status)
+    if tech_group:
+        conditions.append("COALESCE(tech_group_name, 'Tier 1 Support') = ?")
+        params.append(tech_group)
     if unassigned_only:
         conditions.append("(technician_id IS NULL OR technician_id = '')")
 
