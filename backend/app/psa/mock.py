@@ -27,26 +27,26 @@ _HOUR = timedelta(hours=1)
 _DAY = timedelta(days=1)
 
 MOCK_TECHNICIANS = [
-    Technician(id="t1", first_name="Troy", last_name="Anderson", email="troy@integotec.com", role="Lead"),
-    Technician(id="t2", first_name="Mike", last_name="Chen", email="mike@integotec.com", role="Technician"),
-    Technician(id="t3", first_name="Sarah", last_name="Johnson", email="sarah@integotec.com", role="Technician"),
-    Technician(id="t4", first_name="James", last_name="Wilson", email="james@integotec.com", role="Technician"),
+    Technician(id="t1", first_name="Alex", last_name="Morgan", email="alex@example.com", role="Lead"),
+    Technician(id="t2", first_name="Mike", last_name="Chen", email="mike@example.com", role="Technician"),
+    Technician(id="t3", first_name="Sarah", last_name="Johnson", email="sarah@example.com", role="Technician"),
+    Technician(id="t4", first_name="James", last_name="Wilson", email="james@example.com", role="Technician"),
 ]
 
 MOCK_CLIENTS = [
-    Client(id="c1", name="Acme Corp"),
-    Client(id="c2", name="River City Dental"),
-    Client(id="c3", name="Douglas County"),
-    Client(id="c4", name="Umpqua Bank"),
-    Client(id="c5", name="Roseburg Forest Products"),
+    Client(id="c1", name="Acme Corp", plan="Plan A"),
+    Client(id="c2", name="Riverside Dental", plan="Plan C"),
+    Client(id="c3", name="Greenfield County", plan="Plan B"),
+    Client(id="c4", name="Valley Credit Union", plan="Plan C"),
+    Client(id="c5", name="Summit Manufacturing", plan="Plan A"),
 ]
 
 MOCK_CONTRACTS = [
     ClientContract(contract_id="ct1", client_id="c1", client_name="Acme Corp", contract_type="hourly", status="active"),
-    ClientContract(contract_id="ct2", client_id="c2", client_name="River City Dental", contract_type="managed", status="active"),
-    ClientContract(contract_id="ct3", client_id="c3", client_name="Douglas County", contract_type="block_hour", status="active"),
-    ClientContract(contract_id="ct4", client_id="c4", client_name="Umpqua Bank", contract_type="managed", status="active"),
-    ClientContract(contract_id="ct5", client_id="c5", client_name="Roseburg Forest Products", contract_type="hourly", status="active"),
+    ClientContract(contract_id="ct2", client_id="c2", client_name="Riverside Dental", contract_type="managed", status="active"),
+    ClientContract(contract_id="ct3", client_id="c3", client_name="Greenfield County", contract_type="block_hour", status="active"),
+    ClientContract(contract_id="ct4", client_id="c4", client_name="Valley Credit Union", contract_type="managed", status="active"),
+    ClientContract(contract_id="ct5", client_id="c5", client_name="Summit Manufacturing", contract_type="hourly", status="active"),
 ]
 
 
@@ -83,7 +83,7 @@ def _ticket(
         client_name=client.name,
         requester_id=f"req{tid}",
         requester_name=f"User {tid}",
-        tech_group_id="6410137295585656832",
+        tech_group_id="mock-tier1-group",
         tech_group_name="Tier 1 Support",
         technician_id=tech.id if tech else None,
         technician_name=f"{tech.first_name} {tech.last_name}" if tech else None,

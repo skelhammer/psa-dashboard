@@ -25,7 +25,7 @@ export default function Layout() {
         {/* Logo */}
         <div className="p-5 border-b border-gray-800">
           <h1 className="text-lg font-bold tracking-tight">
-            <span className="text-brand-gold">Integotec</span>
+            <span className="text-brand-gold">PSA</span>
             <span className="text-gray-400 font-normal ml-1.5">Dashboard</span>
           </h1>
         </div>

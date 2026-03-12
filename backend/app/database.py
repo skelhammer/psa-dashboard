@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS technicians (
 
 CREATE TABLE IF NOT EXISTS clients (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL DEFAULT ''
+    name TEXT NOT NULL DEFAULT '',
+    plan TEXT
 );
 
 CREATE TABLE IF NOT EXISTS client_contracts (

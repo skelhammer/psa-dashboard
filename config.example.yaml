@@ -3,7 +3,7 @@ psa:
   superops:
     api_url: https://api.superops.ai/msp
     api_token: YOUR_API_TOKEN_HERE
-    subdomain: integotec
+    subdomain: YOUR_SUBDOMAIN
   halopsa:  # Pre-stub for future use
     api_url: https://INSTANCE.halopsa.com/api
     client_id: YOUR_CLIENT_ID
@@ -19,6 +19,12 @@ database:
 server:
   host: 0.0.0.0
   port: 8080
+
+billing:
+  # Client plan names (from PSA tags/fields) that indicate hourly billing.
+  # Clients with these plans will be auto-flagged for billing audit.
+  hourly_plans: []
+  # Example: hourly_plans: ["Plan A", "Plan B"]
 
 thresholds:
   stale_ticket_days: 3

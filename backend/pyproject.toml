@@ -1,7 +1,7 @@
 [project]
 name = "psa-dashboard"
 version = "0.1.0"
-description = "Integotec Manager Metrics Dashboard"
+description = "PSA Manager Metrics Dashboard"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110.0",

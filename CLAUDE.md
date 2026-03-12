@@ -1,4 +1,4 @@
-# Integotec Manager Metrics Dashboard
+# PSA Dashboard
 
 ## Project Rules
 - PSA abstraction is mandatory. No SuperOps-specific code outside `backend/app/psa/superops.py`.

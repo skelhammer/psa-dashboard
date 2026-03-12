@@ -176,6 +176,13 @@ async def mtz_drilldown(
             {extra}
             ORDER BY {PRIORITY_ORDER} DESC, created_time ASC
         """,
+        "unresolved_billing_flags": f"""
+            SELECT t.* FROM tickets t
+            JOIN billing_flags bf ON t.id = bf.ticket_id
+            WHERE bf.resolved = 0
+            {extra}
+            ORDER BY {PRIORITY_ORDER} DESC, t.created_time ASC
+        """,
     }
 
     if card_type not in query_map:

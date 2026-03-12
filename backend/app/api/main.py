@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Startup: init DB, create provider, start sync scheduler."""
     settings = get_settings()
-    logger.info("Starting Integotec Manager Dashboard")
+    logger.info("Starting PSA Dashboard")
     logger.info("PSA provider: %s", settings.psa.provider)
 
     # Initialize database
@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="Integotec Manager Dashboard",
+        title="PSA Dashboard",
         version="0.1.0",
         lifespan=lifespan,
     )

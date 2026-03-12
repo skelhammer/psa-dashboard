@@ -24,24 +24,46 @@ async def run_post_sync_hooks(conn: aiosqlite.Connection, provider: PSAProvider)
 
 
 async def sync_billing_config(conn: aiosqlite.Connection):
-    """Auto-create/update billing_config for clients with billable contracts.
+    """Auto-create/update billing_config for clients that should be billed hourly.
+
+    Detection methods (in priority order):
+    1. Client plan tag matches a configured hourly plan name (from config.yaml billing.hourly_plans)
+    2. Client has an active hourly or block_hour contract
 
     Only updates entries where auto_detected = true (never overwrites manual overrides).
     """
+    from app.config import get_settings
+    settings = get_settings()
+    hourly_plans = settings.billing.hourly_plans
     now = datetime.now().isoformat()
 
-    # Find clients with active hourly or block_hour contracts
-    rows = await conn.execute_fetchall(
-        """SELECT DISTINCT client_id, client_name, contract_type
+    billable_clients: list[tuple[str, str]] = []  # (client_id, billing_type)
+
+    # Method 1: Plan-based detection (from client tags/plan field)
+    if hourly_plans:
+        placeholders = ",".join("?" for _ in hourly_plans)
+        plan_rows = await conn.execute_fetchall(
+            f"SELECT id, plan FROM clients WHERE plan IN ({placeholders})",
+            hourly_plans,
+        )
+        for row in plan_rows:
+            billable_clients.append((row[0], "hourly"))
+        if plan_rows:
+            logger.info("Plan-based billing: found %d clients matching hourly plans", len(plan_rows))
+
+    # Method 2: Contract-based detection (fallback)
+    contract_rows = await conn.execute_fetchall(
+        """SELECT DISTINCT client_id, contract_type
            FROM client_contracts
            WHERE status = 'active'
              AND contract_type IN ('hourly', 'block_hour')"""
     )
+    already_found = {c[0] for c in billable_clients}
+    for row in contract_rows:
+        if row[0] not in already_found:
+            billable_clients.append((row[0], row[1]))
 
-    for row in rows:
-        client_id = row[0]
-        contract_type = row[2]
-
+    for client_id, billing_type in billable_clients:
         # Check if manual override exists
         existing = await conn.execute_fetchall(
             "SELECT auto_detected FROM billing_config WHERE client_id = ?",
@@ -59,7 +81,7 @@ async def sync_billing_config(conn: aiosqlite.Connection):
                ON CONFLICT(client_id) DO UPDATE SET
                    billing_type = CASE WHEN auto_detected = 1 THEN excluded.billing_type ELSE billing_type END,
                    updated_at = excluded.updated_at""",
-            (client_id, contract_type, now),
+            (client_id, billing_type, now),
         )
 
     logger.info("Billing config sync complete")

@@ -12,8 +12,10 @@ import {
 } from 'recharts'
 
 const tooltipStyle = {
-  contentStyle: { backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' },
+  contentStyle: { backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#e5e7eb' },
   labelStyle: { color: '#9ca3af' },
+  itemStyle: { color: '#d1d5db' },
+  cursor: { fill: 'rgba(180, 155, 127, 0.1)' },
 }
 
 export default function Overview() {

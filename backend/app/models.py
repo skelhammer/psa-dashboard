@@ -59,6 +59,7 @@ class Technician:
 class Client:
     id: str
     name: str
+    plan: str | None = None
 
 
 @dataclass

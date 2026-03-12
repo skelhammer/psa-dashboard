@@ -1,6 +1,5 @@
 """SuperOps PSA provider implementation.
 
-Built from proven GraphQL queries against the Integotec SuperOps instance.
 All SuperOps-specific field names and API quirks are contained here.
 """
 
@@ -33,7 +32,7 @@ CLOSED_STATUSES = ["Resolved", "Closed"]
 MAX_PAGES_ACTIVE = 50
 MAX_PAGES_HISTORICAL = 100
 
-# GraphQL queries (proven against Integotec instance)
+# GraphQL queries
 QUERY_TICKET_LIST = """
 query getTicketList($input: ListInfoInput!) {
     getTicketList(input: $input) {
@@ -95,10 +94,11 @@ query getClientList($input: ListInfoInput!) {
             stage
             status
             emailDomains
-            accountManager { userId name }
-            primaryContact { userId name }
-            hqSite { id name }
-            technicianGroups { groupId name }
+            customFields
+            accountManager
+            primaryContact
+            hqSite
+            technicianGroups
         }
         listInfo { page pageSize hasMore totalCount }
     }
@@ -458,9 +458,14 @@ class SuperOpsProvider(PSAProvider):
 
         clients = []
         for raw in raw_items:
+            # Plan is stored in customFields.udf1select
+            custom_fields = raw.get("customFields") or {}
+            plan = custom_fields.get("udf1select") if isinstance(custom_fields, dict) else None
+
             clients.append(Client(
                 id=str(raw.get("accountId", "")),
                 name=raw.get("name", ""),
+                plan=plan,
             ))
         return clients
 
@@ -515,7 +520,8 @@ class SuperOpsProvider(PSAProvider):
         return []
 
     def get_ticket_url(self, ticket_id: str) -> str:
-        return f"https://helpdesk.integotec.com/#/tickets/{ticket_id}/ticket"
+        subdomain = self.config.subdomain
+        return f"https://helpdesk.{subdomain}.com/#/tickets/{ticket_id}/ticket"
 
     def get_provider_name(self) -> str:
         return "SuperOps"

@@ -46,6 +46,11 @@ class ServerConfig:
 
 
 @dataclass
+class BillingConfig:
+    hourly_plans: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ThresholdsConfig:
     stale_ticket_days: int = 3
     sla_warning_minutes: int = 30
@@ -60,6 +65,7 @@ class Settings:
     sync: SyncConfig = field(default_factory=SyncConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    billing: BillingConfig = field(default_factory=BillingConfig)
     thresholds: ThresholdsConfig = field(default_factory=ThresholdsConfig)
 
     @property
@@ -103,11 +109,17 @@ def load_settings(config_path: Path | None = None) -> Settings:
         halopsa=_build_nested(HaloPSAConfig, psa_raw.get("halopsa")),
     )
 
+    billing_raw = raw.get("billing", {})
+    billing = BillingConfig(
+        hourly_plans=billing_raw.get("hourly_plans", []),
+    )
+
     return Settings(
         psa=psa,
         sync=_build_nested(SyncConfig, raw.get("sync")),
         database=_build_nested(DatabaseConfig, raw.get("database")),
         server=_build_nested(ServerConfig, raw.get("server")),
+        billing=billing,
         thresholds=_build_nested(ThresholdsConfig, raw.get("thresholds")),
     )
 

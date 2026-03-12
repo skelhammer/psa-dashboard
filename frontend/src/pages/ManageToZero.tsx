@@ -42,9 +42,10 @@ export default function ManageToZero() {
               key={card.key}
               onClick={() => setActiveCard(isActive ? null : card.key)}
               className={clsx(
-                'rounded-lg border p-4 text-left transition-all',
-                zeroTargetColor(count),
-                isActive && 'ring-2 ring-brand-gold/50'
+                'rounded-lg p-4 text-left transition-all',
+                isActive
+                  ? 'ring-2 ring-brand-gold border border-brand-gold/40 bg-brand-gold/5'
+                  : 'border border-gray-800 bg-gray-900 hover:border-gray-700'
               )}
             >
               <p className={clsx('text-3xl font-bold tabular-nums', zeroTargetTextColor(count))}>

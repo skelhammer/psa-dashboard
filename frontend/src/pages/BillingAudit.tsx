@@ -33,7 +33,7 @@ export default function BillingAudit() {
     if (!resolveNote.trim()) return
     resolveMutation.mutate({
       flagId,
-      resolved_by: 'Troy',
+      resolved_by: 'Admin',
       resolution_note: resolveNote,
     }, {
       onSuccess: () => {
