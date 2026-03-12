@@ -56,8 +56,8 @@ psa:
     subdomain: YOUR_SUBDOMAIN
 
 billing:
-  hourly_plans: ["MSP Basic", "MSP Advanced", "Break Fix"]
-  unlimited_plans: ["MSP Platinum", "MSP Premium"]
+  hourly_plans: ["Plan A", "Plan B"]       # Plans that bill hourly
+  unlimited_plans: ["Unlimited Plan"]       # Plans excluded from billing
 
 server:
   timezone: America/Los_Angeles  # Your IANA timezone
