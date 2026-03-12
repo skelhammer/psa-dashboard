@@ -9,8 +9,8 @@ A real-time helpdesk metrics dashboard that syncs with your PSA (Professional Se
 - **Technician Performance** -- Per-tech metrics including closed tickets, response times, worklog hours, utilization, and billing compliance
 - **Billing Audit** -- Flags for billable client tickets missing worklogs, with per-client summaries and resolution tracking
 - **Manage to Zero** -- Zero-target cards for unassigned tickets, SLA violations, stale tickets, and more
-- **Global Filters** -- Date range presets with custom date pickers, plus client, technician, and priority filters on every page
-- **Auto Sync** -- Background sync on a configurable interval with incremental updates
+- **Global Filters** -- Date range presets with custom date pickers, plus client, technician, priority, and tech group filters on every page
+- **Auto Sync** -- Background sync on a configurable interval with incremental updates, nightly full sync, and automatic cleanup of deleted tickets
 
 ## Supported PSA Providers
 
@@ -65,13 +65,32 @@ server:
 
 ### 3. Install and run
 
-#### Windows
+#### Quick start (recommended)
 
-Open two terminals (PowerShell or Command Prompt):
+The included launch scripts handle venv creation, dependency installation, and starting both servers.
 
-**Terminal 1 (Backend):**
+**Windows:**
+
+Double-click `start.bat`, or from a terminal:
 
 ```powershell
+start.bat
+```
+
+**Linux / macOS:**
+
+```bash
+./start.sh
+```
+
+#### Manual setup
+
+If you prefer to run the backend and frontend separately:
+
+**Windows** (two terminals):
+
+```powershell
+# Terminal 1 - Backend
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
@@ -79,21 +98,17 @@ pip install -r requirements.txt
 python run.py
 ```
 
-**Terminal 2 (Frontend):**
-
 ```powershell
+# Terminal 2 - Frontend
 cd frontend
 npm install
 npm run dev
 ```
 
-#### Linux / macOS
-
-Open two terminals:
-
-**Terminal 1 (Backend):**
+**Linux / macOS** (two terminals):
 
 ```bash
+# Terminal 1 - Backend
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
@@ -101,9 +116,8 @@ pip install -r requirements.txt
 python run.py
 ```
 
-**Terminal 2 (Frontend):**
-
 ```bash
+# Terminal 2 - Frontend
 cd frontend
 npm install
 npm run dev
@@ -113,12 +127,14 @@ npm run dev
 
 Go to **http://localhost:3000** in your browser.
 
-The frontend dev server proxies API requests to the backend on port 8080. On first launch, the backend runs a full sync from your PSA provider, which may take a couple of minutes depending on ticket volume. Subsequent syncs are incremental and run every 15 minutes by default.
+The frontend dev server proxies API requests to the backend on port 8080. On first launch, the backend runs a full sync from your PSA provider, which may take a couple of minutes depending on ticket volume. Subsequent syncs are incremental and run every 15 minutes by default. A full sync runs automatically at midnight to clean up deleted/trashed tickets.
 
 ## Project Structure
 
 ```
 psa-dashboard/
+  start.bat                  # Windows launch script
+  start.sh                   # Linux/macOS launch script
   config.example.yaml        # Template config (tracked)
   config.yaml                # Your config with secrets (gitignored)
   backend/
