@@ -60,6 +60,10 @@ class Client:
     id: str
     name: str
     plan: str | None = None
+    stage: str | None = None
+    status: str | None = None
+    profit_type: str | None = None
+    account_number: str | None = None
 
 
 @dataclass

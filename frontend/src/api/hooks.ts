@@ -29,6 +29,15 @@ export function useFilters() {
   })
 }
 
+export function useDateRangeInfo(dateRange: string) {
+  return useQuery({
+    queryKey: ['date-range-info', dateRange],
+    queryFn: () => api.get('/filters/date-range', { params: { date_range: dateRange } }).then(r => r.data),
+    staleTime: 60_000,
+    enabled: dateRange !== 'custom',
+  })
+}
+
 // Overview
 export function useOverview(params?: Record<string, string>) {
   return useQuery({
@@ -37,10 +46,10 @@ export function useOverview(params?: Record<string, string>) {
   })
 }
 
-export function useOverviewCharts() {
+export function useOverviewCharts(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['overview-charts'],
-    queryFn: () => api.get('/overview/charts').then(r => r.data),
+    queryKey: ['overview-charts', params],
+    queryFn: () => api.get('/overview/charts', { params }).then(r => r.data),
   })
 }
 
@@ -94,10 +103,10 @@ export function useBillingFlags(params?: Record<string, string>) {
   })
 }
 
-export function useBillingSummary() {
+export function useBillingSummary(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['billing-summary'],
-    queryFn: () => api.get('/billing/summary').then(r => r.data),
+    queryKey: ['billing-summary', params],
+    queryFn: () => api.get('/billing/summary', { params }).then(r => r.data),
   })
 }
 

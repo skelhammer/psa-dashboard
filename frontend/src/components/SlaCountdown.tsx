@@ -4,6 +4,7 @@ import { getTicketSla } from '../utils/formatting'
 interface SlaCountdownProps {
   ticket: {
     first_response_due?: string | null
+    first_response_time?: string | null
     first_response_violated?: boolean | null
     resolution_due?: string | null
     resolution_violated?: boolean | null

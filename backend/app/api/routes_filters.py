@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+
+from app.api.dependencies import FilterParams
 
 router = APIRouter(prefix="/api", tags=["filters"])
 
@@ -13,7 +15,7 @@ async def get_filter_options(request: Request):
     conn = await db.get_connection()
 
     clients = await conn.execute_fetchall(
-        "SELECT id, name FROM clients ORDER BY name"
+        "SELECT id, name FROM clients WHERE stage = 'Active' ORDER BY name"
     )
     technicians = await conn.execute_fetchall(
         "SELECT id, first_name, last_name FROM technicians ORDER BY first_name"
@@ -37,4 +39,15 @@ async def get_filter_options(request: Request):
         "categories": [r["category"] for r in categories],
         "statuses": [r["status"] for r in statuses],
         "priorities": [r["priority"] for r in priorities],
+    }
+
+
+@router.get("/filters/date-range")
+async def get_date_range_info(filters: FilterParams = Depends()):
+    """Return the resolved date range label for the selected preset."""
+    return {
+        "preset": filters.date_range_key,
+        "label": filters.date_range_label,
+        "date_from": filters.date_from.strftime("%Y-%m-%d"),
+        "date_to": filters.date_to.strftime("%Y-%m-%d"),
     }

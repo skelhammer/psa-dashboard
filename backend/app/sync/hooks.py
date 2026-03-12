@@ -30,12 +30,43 @@ async def sync_billing_config(conn: aiosqlite.Connection):
     1. Client plan tag matches a configured hourly plan name (from config.yaml billing.hourly_plans)
     2. Client has an active hourly or block_hour contract
 
+    Clients on unlimited_plans are always excluded from billing tracking.
     Only updates entries where auto_detected = true (never overwrites manual overrides).
     """
     from app.config import get_settings
     settings = get_settings()
     hourly_plans = settings.billing.hourly_plans
+    unlimited_plans = settings.billing.unlimited_plans
     now = datetime.now().isoformat()
+
+    # Build set of client IDs that should never be billed
+    excluded_ids: set[str] = set()
+    if unlimited_plans:
+        placeholders = ",".join("?" for _ in unlimited_plans)
+        excluded_rows = await conn.execute_fetchall(
+            f"SELECT id FROM clients WHERE plan IN ({placeholders})",
+            unlimited_plans,
+        )
+        excluded_ids = {row[0] for row in excluded_rows}
+        logger.info("Billing exclusion: %d clients on unlimited plans", len(excluded_ids))
+
+    # Remove existing auto-detected billing config for excluded clients
+    if excluded_ids:
+        id_placeholders = ",".join("?" for _ in excluded_ids)
+        await conn.execute(
+            f"DELETE FROM billing_config WHERE client_id IN ({id_placeholders}) AND auto_detected = 1",
+            list(excluded_ids),
+        )
+        # Also auto-resolve any open billing flags for excluded clients
+        await conn.execute(
+            f"""UPDATE billing_flags
+                SET resolved = 1, resolved_at = ?, resolution_note = 'Auto-resolved: client on unlimited plan'
+                WHERE resolved = 0
+                  AND ticket_id IN (
+                      SELECT id FROM tickets WHERE client_id IN ({id_placeholders})
+                  )""",
+            [now, *list(excluded_ids)],
+        )
 
     billable_clients: list[tuple[str, str]] = []  # (client_id, billing_type)
 
@@ -43,13 +74,14 @@ async def sync_billing_config(conn: aiosqlite.Connection):
     if hourly_plans:
         placeholders = ",".join("?" for _ in hourly_plans)
         plan_rows = await conn.execute_fetchall(
-            f"SELECT id, plan FROM clients WHERE plan IN ({placeholders})",
+            f"SELECT id, plan FROM clients WHERE plan IN ({placeholders}) AND stage = 'Active'",
             hourly_plans,
         )
         for row in plan_rows:
-            billable_clients.append((row[0], "hourly"))
+            if row[0] not in excluded_ids:
+                billable_clients.append((row[0], "hourly"))
         if plan_rows:
-            logger.info("Plan-based billing: found %d clients matching hourly plans", len(plan_rows))
+            logger.info("Plan-based billing: found %d clients matching hourly plans", len(billable_clients))
 
     # Method 2: Contract-based detection (fallback)
     contract_rows = await conn.execute_fetchall(
@@ -60,7 +92,7 @@ async def sync_billing_config(conn: aiosqlite.Connection):
     )
     already_found = {c[0] for c in billable_clients}
     for row in contract_rows:
-        if row[0] not in already_found:
+        if row[0] not in already_found and row[0] not in excluded_ids:
             billable_clients.append((row[0], row[1]))
 
     for client_id, billing_type in billable_clients:

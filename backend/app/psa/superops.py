@@ -97,8 +97,11 @@ query getClientList($input: ListInfoInput!) {
             customFields
             accountManager
             primaryContact
+            secondaryContact
             hqSite
             technicianGroups
+            createdTime
+            updatedTime
         }
         listInfo { page pageSize hasMore totalCount }
     }
@@ -108,10 +111,14 @@ query getClientList($input: ListInfoInput!) {
 QUERY_CONTRACT_LIST = """
 query getClientContractList($input: ListInfoInput) {
     getClientContractList(input: $input) {
-        contracts {
+        clientContracts {
             contractId
             client
-            contract
+            contract {
+                contractId
+                name
+                contractType
+            }
             startDate
             endDate
             contractStatus
@@ -128,11 +135,7 @@ query getTicketConversationList($input: TicketIdentifierInput!) {
         content
         time
         type
-        user {
-            userId
-            name
-            email
-        }
+        user
     }
 }
 """
@@ -152,11 +155,12 @@ def _parse_datetime(val: str | None) -> datetime | None:
 
 
 def _parse_worklog_minutes(val: str | None) -> int:
-    """Parse worklogTimespent string (e.g. '100.00') to integer minutes."""
+    """Parse worklogTimespent string (hours, e.g. '3.25') to integer minutes."""
     if not val:
         return 0
     try:
-        return int(float(val))
+        hours = float(val)
+        return round(hours * 60)
     except (ValueError, TypeError):
         return 0
 
@@ -218,23 +222,20 @@ def _map_ticket(raw: dict) -> Ticket:
 
 
 def _normalize_contract_type(raw_type: str | None) -> str:
-    """Map SuperOps contract type strings to normalized types."""
+    """Map SuperOps contract type enum to normalized types.
+
+    SuperOps ContractType enum: SERVICE, USAGE, ONE_TIME, TIME_AND_MATERIAL
+    """
     if not raw_type:
         return "other"
-    lower = raw_type.lower()
-    if "block hour" in lower or "block_hour" in lower:
-        return "block_hour"
-    if "block money" in lower or "block_money" in lower:
-        return "block_money"
-    if "hourly" in lower or "time and material" in lower:
-        return "hourly"
-    if "managed" in lower or "service bundle" in lower:
-        return "managed"
-    if "per device" in lower or "per_device" in lower:
-        return "per_device"
-    if "flat" in lower:
-        return "flat_rate"
-    return "other"
+    upper = raw_type.upper()
+    mapping = {
+        "SERVICE": "managed",
+        "USAGE": "hourly",
+        "ONE_TIME": "flat_rate",
+        "TIME_AND_MATERIAL": "hourly",
+    }
+    return mapping.get(upper, "other")
 
 
 class SuperOpsProvider(PSAProvider):
@@ -283,12 +284,13 @@ class SuperOpsProvider(PSAProvider):
         """Paginate through all results for a query."""
         all_items = []
         page = 1
+        page_size = 100
 
         while page <= max_pages:
             variables = {
                 "input": {
                     "page": page,
-                    "pageSize": 100,
+                    "pageSize": page_size,
                     **(extra_input or {}),
                 }
             }
@@ -299,11 +301,28 @@ class SuperOpsProvider(PSAProvider):
             list_info = result.get("listInfo", {})
 
             all_items.extend(items)
+            logger.debug("Paginate %s page %d: got %d items (total so far: %d, totalCount: %s, hasMore: %s)",
+                         result_key, page, len(items), len(all_items),
+                         list_info.get("totalCount"), list_info.get("hasMore"))
 
-            if not list_info.get("hasMore", False):
+            # Stop if no items returned (empty page)
+            if not items:
                 break
 
-            page += 1
+            # Use hasMore if available, otherwise check totalCount
+            has_more = list_info.get("hasMore")
+            total_count = list_info.get("totalCount")
+
+            if has_more is True:
+                page += 1
+                continue
+
+            # hasMore is None or False; double-check with totalCount
+            if total_count and len(all_items) < total_count:
+                page += 1
+                continue
+
+            break
 
         return all_items
 
@@ -418,15 +437,22 @@ class SuperOpsProvider(PSAProvider):
 
         conversations = []
         for raw in raw_convos:
+            # user is a JSON scalar; parse it as dict
             user = raw.get("user") or {}
+            if isinstance(user, str):
+                import json as _json
+                try:
+                    user = _json.loads(user)
+                except (ValueError, TypeError):
+                    user = {}
             conversations.append(Conversation(
                 conversation_id=str(raw.get("conversationId", "")),
                 content=raw.get("content", ""),
                 time=_parse_datetime(raw.get("time")),
                 conv_type=raw.get("type", ""),
-                user_id=str(user.get("userId", "")),
-                user_name=user.get("name", ""),
-                user_email=user.get("email", ""),
+                user_id=str(user.get("userId", "")) if isinstance(user, dict) else "",
+                user_name=user.get("name", "") if isinstance(user, dict) else "",
+                user_email=user.get("email", "") if isinstance(user, dict) else "",
             ))
 
         return conversations
@@ -458,14 +484,22 @@ class SuperOpsProvider(PSAProvider):
 
         clients = []
         for raw in raw_items:
-            # Plan is stored in customFields.udf1select
+            # customFields is a JSON scalar with UDF fields
             custom_fields = raw.get("customFields") or {}
-            plan = custom_fields.get("udf1select") if isinstance(custom_fields, dict) else None
+            if not isinstance(custom_fields, dict):
+                custom_fields = {}
+            plan = custom_fields.get("udf1select")
+            profit_type = custom_fields.get("udf11select")
+            account_number = custom_fields.get("udf12num")
 
             clients.append(Client(
                 id=str(raw.get("accountId", "")),
                 name=raw.get("name", ""),
                 plan=plan,
+                stage=raw.get("stage"),
+                status=raw.get("status"),
+                profit_type=profit_type,
+                account_number=account_number,
             ))
         return clients
 
@@ -475,7 +509,7 @@ class SuperOpsProvider(PSAProvider):
 
     async def get_all_contracts(self) -> list[ClientContract]:
         raw_items = await self._paginate(
-            QUERY_CONTRACT_LIST, "getClientContractList", "contracts",
+            QUERY_CONTRACT_LIST, "getClientContractList", "clientContracts",
         )
 
         # First-run discovery logging
@@ -485,12 +519,13 @@ class SuperOpsProvider(PSAProvider):
 
         contracts = []
         for raw in raw_items:
+            # client is a JSON scalar (dict with accountId, name, etc.)
             client_obj = raw.get("client") or {}
+            # contract is an object with contractId, name, contractType
             contract_obj = raw.get("contract") or {}
 
-            # Discover contract type field (undocumented)
-            contract_type_raw = contract_obj.get("type") or contract_obj.get("contractType") or ""
-            logger.info("Contract %s type raw: %s, full contract obj: %s", raw.get("contractId"), contract_type_raw, contract_obj)
+            contract_type_raw = contract_obj.get("contractType", "")
+            logger.info("Contract %s type: %s, name: %s", raw.get("contractId"), contract_type_raw, contract_obj.get("name"))
 
             contracts.append(ClientContract(
                 contract_id=str(raw.get("contractId", "")),
@@ -498,9 +533,9 @@ class SuperOpsProvider(PSAProvider):
                 client_name=client_obj.get("name", ""),
                 contract_type=_normalize_contract_type(str(contract_type_raw)),
                 contract_name=contract_obj.get("name"),
-                status=raw.get("contractStatus", "active").lower(),
-                start_date=None,  # Parse if present
-                end_date=None,
+                status=raw.get("contractStatus", "ACTIVE").lower(),
+                start_date=raw.get("startDate"),
+                end_date=raw.get("endDate"),
             ))
         return contracts
 

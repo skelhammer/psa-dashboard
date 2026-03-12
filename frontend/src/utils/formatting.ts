@@ -99,6 +99,7 @@ export function slaCountdown(
  */
 export function getTicketSla(ticket: {
   first_response_due?: string | null
+  first_response_time?: string | null
   first_response_violated?: boolean | null
   resolution_due?: string | null
   resolution_violated?: boolean | null
@@ -111,8 +112,9 @@ export function getTicketSla(ticket: {
     return slaCountdown(ticket.resolution_due, true)
   }
 
-  // Find the soonest due time
-  const frDue = ticket.first_response_due ? new Date(ticket.first_response_due).getTime() : Infinity
+  // Skip first response due if already responded
+  const frApplies = ticket.first_response_due && !ticket.first_response_time
+  const frDue = frApplies ? new Date(ticket.first_response_due!).getTime() : Infinity
   const resDue = ticket.resolution_due ? new Date(ticket.resolution_due).getTime() : Infinity
 
   if (frDue === Infinity && resDue === Infinity) {

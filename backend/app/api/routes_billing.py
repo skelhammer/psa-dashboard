@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
+from app.api.dependencies import FilterParams
 from app.api.queries import PRIORITY_ORDER, ticket_row_to_dict
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
@@ -20,10 +21,9 @@ class ResolveFlag(BaseModel):
 @router.get("/flags")
 async def billing_flags(
     request: Request,
+    filters: FilterParams = Depends(),
     resolved: bool = Query(False, description="Show resolved flags"),
     flag_type: str | None = Query(None),
-    client_id: str | None = Query(None),
-    technician_id: str | None = Query(None),
 ):
     """Get billing flags with filters."""
     db = request.app.state.db
@@ -32,15 +32,26 @@ async def billing_flags(
     conditions = ["bf.resolved = ?"]
     params: list = [1 if resolved else 0]
 
+    # Date filter on resolution_time (when the ticket was closed)
+    if filters.date_from:
+        conditions.append("t.resolution_time >= ?")
+        params.append(filters.date_from.isoformat())
+    if filters.date_to:
+        conditions.append("t.resolution_time <= ?")
+        params.append(filters.date_to.isoformat())
+
     if flag_type:
         conditions.append("bf.flag_type = ?")
         params.append(flag_type)
-    if client_id:
+    if filters.client_id:
         conditions.append("t.client_id = ?")
-        params.append(client_id)
-    if technician_id:
+        params.append(filters.client_id)
+    if filters.technician_id:
         conditions.append("t.technician_id = ?")
-        params.append(technician_id)
+        params.append(filters.technician_id)
+    if filters.priority:
+        conditions.append("t.priority = ?")
+        params.append(filters.priority)
 
     where = " AND ".join(conditions)
 
@@ -79,7 +90,7 @@ async def billing_flags(
             "url": provider.get_ticket_url(row["ticket_id"]),
         })
 
-    return {"flags": flags, "count": len(flags)}
+    return {"flags": flags, "count": len(flags), "date_range_label": filters.date_range_label}
 
 
 @router.patch("/flags/{flag_id}/resolve")
@@ -100,28 +111,37 @@ async def resolve_flag(flag_id: int, body: ResolveFlag, request: Request):
 
 
 @router.get("/summary")
-async def billing_summary(request: Request):
+async def billing_summary(request: Request, filters: FilterParams = Depends()):
     """KPI cards and client billing summary."""
     db = request.app.state.db
     conn = await db.get_connection()
 
-    now = datetime.now()
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    week_start = now - __import__("datetime").timedelta(days=now.weekday())
+    period_start = filters.date_from.isoformat()
+    period_end = filters.date_to.isoformat() if filters.date_to else None
 
-    # Unresolved flags
+    date_cond = "t.resolution_time >= ?"
+    date_params: list = [period_start]
+    if period_end:
+        date_cond += " AND t.resolution_time <= ?"
+        date_params.append(period_end)
+
+    # Unresolved flags (tickets closed in period)
     unresolved = await conn.execute_fetchall(
-        "SELECT COUNT(*) FROM billing_flags WHERE resolved = 0"
+        f"""SELECT COUNT(*) FROM billing_flags bf
+           JOIN tickets t ON bf.ticket_id = t.id
+           WHERE bf.resolved = 0 AND {date_cond}""",
+        date_params,
     )
 
-    # Flags resolved this week / month
-    resolved_week = await conn.execute_fetchall(
-        "SELECT COUNT(*) FROM billing_flags WHERE resolved = 1 AND resolved_at >= ?",
-        (week_start.isoformat(),),
-    )
-    resolved_month = await conn.execute_fetchall(
-        "SELECT COUNT(*) FROM billing_flags WHERE resolved = 1 AND resolved_at >= ?",
-        (month_start.isoformat(),),
+    # Flags resolved in period
+    resolved_params: list = [period_start]
+    resolved_cond = "resolved_at >= ?"
+    if period_end:
+        resolved_cond += " AND resolved_at <= ?"
+        resolved_params.append(period_end)
+    resolved_period = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM billing_flags WHERE resolved = 1 AND {resolved_cond}",
+        resolved_params,
     )
 
     # Billable client summary
@@ -130,7 +150,7 @@ async def billing_summary(request: Request):
                bc.auto_detected, bc.track_billing
            FROM billing_config bc
            JOIN clients c ON bc.client_id = c.id
-           WHERE bc.track_billing = 1
+           WHERE bc.track_billing = 1 AND c.stage = 'Active'
            ORDER BY c.name"""
     )
 
@@ -138,23 +158,29 @@ async def billing_summary(request: Request):
     for client in clients:
         cid = client["client_id"]
 
+        client_date_cond = "resolution_time >= ?"
+        client_date_params: list = [period_start]
+        if period_end:
+            client_date_cond += " AND resolution_time <= ?"
+            client_date_params.append(period_end)
+
         total = await conn.execute_fetchall(
-            "SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND created_time >= ?",
-            (cid, month_start.isoformat()),
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond}",
+            [cid, *client_date_params],
         )
         with_time = await conn.execute_fetchall(
-            "SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND created_time >= ? AND worklog_minutes > 0",
-            (cid, month_start.isoformat()),
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond} AND worklog_minutes > 0",
+            [cid, *client_date_params],
         )
         hours = await conn.execute_fetchall(
-            "SELECT SUM(worklog_minutes) FROM tickets WHERE client_id = ? AND created_time >= ?",
-            (cid, month_start.isoformat()),
+            f"SELECT SUM(worklog_minutes) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond}",
+            [cid, *client_date_params],
         )
         flags = await conn.execute_fetchall(
-            """SELECT COUNT(*) FROM billing_flags bf
+            f"""SELECT COUNT(*) FROM billing_flags bf
                JOIN tickets t ON bf.ticket_id = t.id
-               WHERE t.client_id = ? AND bf.resolved = 0""",
-            (cid,),
+               WHERE t.client_id = ? AND bf.resolved = 0 AND {date_cond}""",
+            [cid, *client_date_params],
         )
 
         total_count = total[0][0] or 0
@@ -167,7 +193,7 @@ async def billing_summary(request: Request):
             "billing_type": client["billing_type"],
             "hourly_rate": client["hourly_rate"],
             "auto_detected": bool(client["auto_detected"]),
-            "total_tickets_month": total_count,
+            "total_tickets": total_count,
             "tickets_with_time": with_time_count,
             "tickets_missing_time": missing,
             "missing_pct": round((missing / total_count * 100) if total_count > 0 else 0, 1),
@@ -178,8 +204,8 @@ async def billing_summary(request: Request):
     return {
         "kpis": {
             "unresolved_flags": unresolved[0][0],
-            "resolved_this_week": resolved_week[0][0],
-            "resolved_this_month": resolved_month[0][0],
+            "resolved_period": resolved_period[0][0],
         },
         "clients": client_summaries,
+        "date_range_label": filters.date_range_label,
     }

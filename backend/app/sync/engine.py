@@ -309,8 +309,11 @@ class SyncEngine:
     async def _sync_clients(self, conn: aiosqlite.Connection, clients: list[Client]):
         for client in clients:
             await conn.execute(
-                "INSERT OR REPLACE INTO clients (id, name, plan) VALUES (?, ?, ?)",
-                (client.id, client.name, client.plan),
+                """INSERT OR REPLACE INTO clients
+                   (id, name, plan, stage, status, profit_type, account_number)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (client.id, client.name, client.plan, client.stage,
+                 client.status, client.profit_type, client.account_number),
             )
 
     async def _sync_contracts(self, conn: aiosqlite.Connection, contracts: list[ClientContract]):
@@ -325,8 +328,8 @@ class SyncEngine:
                     contract.contract_id, contract.client_id, contract.client_name,
                     contract.contract_type, contract.contract_name,
                     contract.status,
-                    contract.start_date.isoformat() if contract.start_date else None,
-                    contract.end_date.isoformat() if contract.end_date else None,
+                    str(contract.start_date) if contract.start_date else None,
+                    str(contract.end_date) if contract.end_date else None,
                     now,
                 ),
             )

@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { useTechnicians } from '../api/hooks'
+import { useFilterContext } from '../context/FilterContext'
 import { formatDuration } from '../utils/formatting'
+import GlobalFilters from '../components/GlobalFilters'
 import clsx from 'clsx'
 
 function utilizationColor(pct: number): string {
@@ -11,24 +13,29 @@ function utilizationColor(pct: number): string {
 }
 
 export default function Technicians() {
-  const { data, isLoading } = useTechnicians()
+  const { toParams } = useFilterContext()
+  const params = toParams()
+  const { data, isLoading } = useTechnicians(params)
   const navigate = useNavigate()
 
   if (isLoading) return <div className="text-gray-500">Loading...</div>
 
   const techs = data?.technicians || []
+  const periodLabel = data?.date_range_label || ''
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold">Technician Performance</h2>
+
+      <GlobalFilters />
 
       <div className="overflow-x-auto rounded-lg border border-gray-800">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-900/80 border-b border-gray-800">
               {[
-                'Name', 'Open', 'Closed (Wk)', 'Closed (Mo)', 'Avg FR',
-                'Avg Res', 'FCR %', 'FR Viol', 'Res Viol', 'Hours',
+                'Name', 'Open', 'Closed', 'Avg FR',
+                'Avg Res', 'FR Viol', 'Res Viol', 'Hours',
                 'Util %', 'Stale', 'Reopened', 'Billing %'
               ].map(h => (
                 <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
@@ -46,11 +53,9 @@ export default function Technicians() {
               >
                 <td className="px-3 py-2.5 font-medium text-brand-gold">{tech.name}</td>
                 <td className="px-3 py-2.5 tabular-nums">{tech.open_tickets}</td>
-                <td className="px-3 py-2.5 tabular-nums">{tech.closed_this_week}</td>
-                <td className="px-3 py-2.5 tabular-nums">{tech.closed_this_month}</td>
+                <td className="px-3 py-2.5 tabular-nums">{tech.closed_period}</td>
                 <td className="px-3 py-2.5 tabular-nums text-xs">{formatDuration(tech.avg_first_response_minutes)}</td>
                 <td className="px-3 py-2.5 tabular-nums text-xs">{formatDuration(tech.avg_resolution_minutes)}</td>
-                <td className="px-3 py-2.5 tabular-nums">{tech.fcr_rate_pct}%</td>
                 <td className="px-3 py-2.5 tabular-nums">
                   <span className={tech.fr_violations > 0 ? 'text-red-400' : ''}>
                     {tech.fr_violations} ({tech.fr_violation_pct}%)
@@ -81,6 +86,9 @@ export default function Technicians() {
           </tbody>
         </table>
       </div>
+      {periodLabel && (
+        <p className="text-xs text-gray-500 text-right">{periodLabel}</p>
+      )}
     </div>
   )
 }

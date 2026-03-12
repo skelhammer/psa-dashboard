@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { useBillingFlags, useBillingSummary, useResolveFlag, useFilters } from '../api/hooks'
+import { useBillingFlags, useBillingSummary, useResolveFlag } from '../api/hooks'
+import { useFilterContext } from '../context/FilterContext'
 import KpiCard from '../components/KpiCard'
+import GlobalFilters from '../components/GlobalFilters'
 import clsx from 'clsx'
 import { PRIORITY_COLORS } from '../utils/constants'
 
@@ -12,19 +14,23 @@ const FLAG_TYPE_COLORS: Record<string, string> = {
 }
 
 export default function BillingAudit() {
+  const { toParams } = useFilterContext()
+  const globalParams = toParams()
+
   const [showResolved, setShowResolved] = useState(false)
   const [flagType, setFlagType] = useState('')
   const [resolveId, setResolveId] = useState<number | null>(null)
   const [resolveNote, setResolveNote] = useState('')
 
-  const params: Record<string, string> = {}
-  if (showResolved) params.resolved = 'true'
-  if (flagType) params.flag_type = flagType
+  const flagParams: Record<string, string> = { ...globalParams }
+  if (showResolved) flagParams.resolved = 'true'
+  if (flagType) flagParams.flag_type = flagType
 
-  const { data: flags, isLoading } = useBillingFlags(params)
-  const { data: summary } = useBillingSummary()
+  const { data: flags, isLoading } = useBillingFlags(flagParams)
+  const { data: summary } = useBillingSummary(globalParams)
   const resolveMutation = useResolveFlag()
-  const { data: filterOpts } = useFilters()
+
+  const periodLabel = summary?.date_range_label || ''
 
   const selectClass =
     'bg-gray-800 border border-gray-700 rounded-md px-2.5 py-1.5 text-xs text-gray-300 focus:border-brand-gold/50 focus:outline-none'
@@ -45,24 +51,32 @@ export default function BillingAudit() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold">Billing Audit</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">Billing Audit</h2>
+      </div>
+
+      <GlobalFilters />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
           label="Unresolved Flags"
           value={summary?.kpis?.unresolved_flags ?? '-'}
+          subtitle={periodLabel}
           colorClass={summary?.kpis?.unresolved_flags > 0 ? 'border-red-500/30' : 'border-green-500/30'}
         />
-        <KpiCard label="Resolved This Week" value={summary?.kpis?.resolved_this_week ?? '-'} />
-        <KpiCard label="Resolved This Month" value={summary?.kpis?.resolved_this_month ?? '-'} />
+        <KpiCard
+          label="Resolved"
+          value={summary?.kpis?.resolved_period ?? '-'}
+          subtitle={periodLabel}
+        />
         <KpiCard
           label="Billable Clients"
           value={summary?.clients?.length ?? '-'}
         />
       </div>
 
-      {/* Filters */}
+      {/* Flags Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <label className="flex items-center gap-2 text-xs text-gray-400">
           <input
@@ -182,7 +196,7 @@ export default function BillingAudit() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-900/80 border-b border-gray-800">
-                  {['Client', 'Type', 'Source', 'Tickets (Mo)', 'With Time', 'Missing', 'Missing %', 'Hours', 'Flags'].map(h => (
+                  {['Client', 'Type', 'Source', 'Tickets', 'With Time', 'Missing', 'Missing %', 'Hours', 'Flags'].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -200,7 +214,7 @@ export default function BillingAudit() {
                         {c.auto_detected ? 'Contract' : 'Manual'}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 tabular-nums">{c.total_tickets_month}</td>
+                    <td className="px-3 py-2.5 tabular-nums">{c.total_tickets}</td>
                     <td className="px-3 py-2.5 tabular-nums text-green-400">{c.tickets_with_time}</td>
                     <td className="px-3 py-2.5 tabular-nums">
                       <span className={c.tickets_missing_time > 0 ? 'text-red-400' : ''}>{c.tickets_missing_time}</span>

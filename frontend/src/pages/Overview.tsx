@@ -20,14 +20,16 @@ const tooltipStyle = {
 
 export default function Overview() {
   const { toParams } = useFilterContext()
-  const { data, isLoading } = useOverview(toParams())
-  const { data: charts } = useOverviewCharts()
+  const params = toParams()
+  const { data, isLoading } = useOverview(params)
+  const { data: charts } = useOverviewCharts(params)
 
   if (isLoading) {
     return <div className="text-gray-500">Loading overview...</div>
   }
 
   const kpis = data?.kpis
+  const periodLabel = data?.date_range_label
 
   return (
     <div className="space-y-6">
@@ -41,7 +43,7 @@ export default function Overview() {
         <KpiCard label="Open Tickets" value={kpis?.total_open ?? '-'} />
         <KpiCard label="Created Today" value={kpis?.created_today ?? '-'} />
         <KpiCard label="Created This Week" value={kpis?.created_this_week ?? '-'} />
-        <KpiCard label="Created This Month" value={kpis?.created_this_month ?? '-'} />
+        <KpiCard label="Created (Period)" value={kpis?.created_period ?? '-'} subtitle={periodLabel} />
         <KpiCard
           label="Open vs Closed (Week)"
           value={`${kpis?.open_vs_closed_ratio?.opened ?? 0} / ${kpis?.open_vs_closed_ratio?.closed ?? 0}`}
@@ -53,31 +55,26 @@ export default function Overview() {
         <KpiCard
           label="Avg First Response"
           value={kpis?.avg_first_response_minutes ? formatDuration(kpis.avg_first_response_minutes) : '-'}
-          subtitle="This month"
+          subtitle={periodLabel}
         />
         <KpiCard
           label="Avg Resolution"
           value={kpis?.avg_resolution_minutes ? formatDuration(kpis.avg_resolution_minutes) : '-'}
-          subtitle="This month"
+          subtitle={periodLabel}
         />
         <KpiCard
           label="SLA Compliance"
           value={`${kpis?.sla_compliance_pct ?? '-'}%`}
-          subtitle="This month"
+          subtitle={periodLabel}
           colorClass={
             (kpis?.sla_compliance_pct ?? 100) >= 95 ? 'border-green-500/30' :
             (kpis?.sla_compliance_pct ?? 100) >= 80 ? 'border-yellow-500/30' : 'border-red-500/30'
           }
         />
         <KpiCard
-          label="FCR Rate"
-          value={`${kpis?.fcr_rate_pct ?? '-'}%`}
-          subtitle="First contact resolution"
-        />
-        <KpiCard
           label="Worklog Hours"
           value={kpis?.total_worklog_hours ?? '-'}
-          subtitle="This month"
+          subtitle={periodLabel}
         />
         <KpiCard
           label="Billing Flags"
@@ -86,8 +83,8 @@ export default function Overview() {
         />
         <KpiCard
           label="Reopened"
-          value={kpis?.reopened_this_month ?? 0}
-          subtitle="This month"
+          value={kpis?.reopened_period ?? 0}
+          subtitle={periodLabel}
         />
       </div>
 
@@ -116,7 +113,7 @@ export default function Overview() {
               <Tooltip {...tooltipStyle} />
               <Bar dataKey="opened" fill="#60A5FA" radius={[2, 2, 0, 0]} />
               <Bar dataKey="closed" fill="#34D399" radius={[2, 2, 0, 0]} />
-              <Line type="monotone" dataKey="net_backlog" stroke="#F87171" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="open_count" stroke="#F87171" strokeWidth={2} dot={false} name="Open" />
             </ComposedChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -144,6 +141,23 @@ export default function Overview() {
               <Tooltip {...tooltipStyle} />
               <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                 {(charts?.workload_balance || []).map((_: any, i: number) => (
+                  <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        {/* Group Distribution */}
+        <ChartCard title="Open Tickets by Group">
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={charts?.group_distribution || []} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
+              <YAxis dataKey="group" type="category" tick={{ fontSize: 11, fill: '#9ca3af' }} width={110} />
+              <Tooltip {...tooltipStyle} />
+              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                {(charts?.group_distribution || []).map((_: any, i: number) => (
                   <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                 ))}
               </Bar>

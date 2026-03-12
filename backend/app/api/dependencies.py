@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import Query
+
+from app.config import get_settings
+
+
+def _get_tz() -> ZoneInfo:
+    return ZoneInfo(get_settings().server.timezone)
 
 
 class FilterParams:
@@ -26,14 +33,26 @@ class FilterParams:
         self.priority = priority
         self.status = status
         self.category = category
+        self.date_range_key = date_range
 
-        # Resolve date range
-        now = datetime.now()
-        if date_from and date_to:
+        tz = _get_tz()
+        now = datetime.now(tz)
+
+        if date_range == "custom" and date_from and date_to:
+            self.date_from = datetime.fromisoformat(date_from).replace(tzinfo=tz)
+            self.date_to = datetime.fromisoformat(date_to).replace(
+                hour=23, minute=59, second=59, tzinfo=tz
+            )
+        elif date_from and date_to:
             self.date_from = datetime.fromisoformat(date_from)
             self.date_to = datetime.fromisoformat(date_to)
         else:
             self.date_from, self.date_to = self._resolve_date_range(date_range, now)
+
+        # Store human-readable label for the resolved range
+        self.date_range_label = _format_range_label(
+            date_range, self.date_from, self.date_to
+        )
 
     @staticmethod
     def _resolve_date_range(preset: str, now: datetime) -> tuple[datetime, datetime]:
@@ -63,6 +82,36 @@ class FilterParams:
             case _:
                 month_start = today_start.replace(day=1)
                 return month_start, now
+
+
+def _fmt_date(dt: datetime) -> str:
+    """Format as 'Mar 1' (no leading zero, cross-platform)."""
+    return f"{dt.strftime('%b')} {dt.day}"
+
+
+def _format_range_label(preset: str, date_from: datetime, date_to: datetime) -> str:
+    """Build a human-readable date range string like 'Mar 1 - Mar 31'."""
+    import calendar
+
+    match preset:
+        case "today":
+            return f"{_fmt_date(date_from)}, {date_from.year}"
+        case "this_week" | "last_30" | "last_90":
+            if date_from.year != date_to.year:
+                return f"{_fmt_date(date_from)}, {date_from.year} - {_fmt_date(date_to)}, {date_to.year}"
+            return f"{_fmt_date(date_from)} - {_fmt_date(date_to)}"
+        case "this_month":
+            last_day = calendar.monthrange(date_from.year, date_from.month)[1]
+            return f"{_fmt_date(date_from)} - {date_from.strftime('%b')} {last_day}"
+        case "this_quarter":
+            q_end_month = date_from.month + 2
+            last_day = calendar.monthrange(date_from.year, q_end_month)[1]
+            end_label = f"{date_from.replace(month=q_end_month).strftime('%b')} {last_day}"
+            return f"{_fmt_date(date_from)} - {end_label}"
+        case "this_year":
+            return f"Jan 1 - Dec 31, {date_from.year}"
+        case _:
+            return f"{_fmt_date(date_from)} - {_fmt_date(date_to)}"
 
 
 def build_where_clause(filters: FilterParams, prefix: str = "", include_date: bool = True) -> tuple[str, list]:
