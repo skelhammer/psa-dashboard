@@ -4,24 +4,26 @@ A real-time helpdesk metrics dashboard that syncs with your PSA (Professional Se
 
 ## Features
 
-- **Overview** -- KPI cards, ticket volume trends, backlog tracking, SLA compliance, workload balance, and group distribution charts
-- **Work Queue** -- Scored and ranked open tickets prioritized by SLA urgency, priority, and age
-- **Technician Performance** -- Per-tech metrics including closed tickets, response times, worklog hours, utilization, and billing compliance
-- **Billing Audit** -- Flags for billable client tickets missing worklogs, with per-client summaries and resolution tracking
-- **Manage to Zero** -- Zero-target cards for unassigned tickets, SLA violations, stale tickets, and more
-- **Global Filters** -- Date range presets with custom date pickers, plus client, technician, priority, and tech group filters on every page
-- **Auto Sync** -- Background sync on a configurable interval with incremental updates, nightly full sync, and automatic cleanup of deleted tickets
+- **Overview:** Clickable KPI cards with contextual navigation, ticket volume trends, backlog tracking, SLA compliance, workload balance, pie charts with floating labels, and group distribution charts. Multi-section CSV and portrait PDF export.
+- **Work Queue:** Scored and ranked open tickets prioritized by SLA urgency, priority, and age
+- **Technician Performance:** Sortable table view and leaderboard with gold/silver/bronze trophy rankings. Multiple leaderboard modes (productivity, response time, resolution time, SLA compliance, hours billed). Per-tech detail pages with KPI cards, volume/SLA trend charts, category/client breakdowns, and open ticket lists.
+- **Client Health:** Per-client metrics with SLA compliance, ticket volume, and drill-down detail pages with trend charts and category breakdowns
+- **Billing Audit:** Flags for billable client tickets missing worklogs, with per-client summaries and resolution tracking
+- **Manage to Zero:** Zero-target cards for unassigned tickets, SLA violations, stale tickets, and more
+- **Global Filters:** Date range presets with custom date pickers, plus client, technician, priority, and tech group filters on every page
+- **Auto Sync:** Background sync on a configurable interval with incremental updates, nightly full sync, and automatic cleanup of deleted tickets
+- **Export:** Per-page PDF export (portrait, multi-page with headers/footers) and CSV export (multi-section for overview, per-chart for individual charts)
 
 ## Supported PSA Providers
 
-- **SuperOps** -- Full support (tickets, clients, technicians, contracts, conversations)
-- **Mock** -- Built-in mock data for testing without API credentials
+- **SuperOps:** Full support (tickets, clients, technicians, contracts, conversations)
+- **Mock:** Built-in mock data for testing without API credentials
 - Architecture supports adding new providers (HaloPSA stub included)
 
 ## Tech Stack
 
 - **Backend:** Python 3.11+, FastAPI, SQLite (aiosqlite), APScheduler
-- **Frontend:** React 18, TypeScript, Tailwind CSS, Recharts, TanStack Query
+- **Frontend:** React 19, TypeScript, Tailwind CSS, Recharts, TanStack Query, Lucide React
 - **Config:** YAML (secrets in gitignored `config.yaml`, template in `config.example.yaml`)
 
 ## Prerequisites
