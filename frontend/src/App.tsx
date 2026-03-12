@@ -7,6 +7,8 @@ import WorkQueue from './pages/WorkQueue'
 import Technicians from './pages/Technicians'
 import TechnicianDetail from './pages/TechnicianDetail'
 import BillingAudit from './pages/BillingAudit'
+import ClientHealth from './pages/ClientHealth'
+import ClientDetail from './pages/ClientDetail'
 
 export default function App() {
   return (
@@ -19,6 +21,8 @@ export default function App() {
           <Route path="/technicians" element={<Technicians />} />
           <Route path="/technicians/:techId" element={<TechnicianDetail />} />
           <Route path="/billing" element={<BillingAudit />} />
+          <Route path="/clients" element={<ClientHealth />} />
+          <Route path="/clients/:clientId" element={<ClientDetail />} />
         </Route>
       </Routes>
     </FilterProvider>

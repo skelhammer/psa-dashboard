@@ -36,3 +36,10 @@ thresholds:
   max_tickets_per_tech: 20
   utilization_target_min: 60
   utilization_target_max: 85
+
+business_hours:
+  enabled: true
+  start_hour: 8     # 8:00 AM
+  end_hour: 17      # 5:00 PM
+  work_days: [1, 2, 3, 4, 5]  # Mon=1 through Fri=5
+  holidays: []       # ISO dates like ["2026-01-01", "2026-12-25"]

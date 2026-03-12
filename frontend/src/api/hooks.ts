@@ -105,6 +105,22 @@ export function useTechnicianDetail(techId: string | undefined) {
   })
 }
 
+// Clients
+export function useClients(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['clients', params],
+    queryFn: () => api.get('/clients', { params }).then(r => r.data),
+  })
+}
+
+export function useClientDetail(clientId: string | undefined, params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['client', clientId, params],
+    queryFn: () => api.get(`/clients/${clientId}`, { params }).then(r => r.data),
+    enabled: !!clientId,
+  })
+}
+
 // Billing
 export function useBillingFlags(params?: Record<string, string>) {
   return useQuery({

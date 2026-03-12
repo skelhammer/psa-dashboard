@@ -8,6 +8,7 @@ const navItems = [
   { to: '/work-queue', label: 'Work Queue', icon: '📋' },
   { to: '/technicians', label: 'Technicians', icon: '👥' },
   { to: '/billing', label: 'Billing Audit', icon: '💰' },
+  { to: '/clients', label: 'Client Health', icon: '🏢' },
 ]
 
 export default function Layout() {

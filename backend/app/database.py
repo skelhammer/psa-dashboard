@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS tickets (
     last_conversation_time TEXT,
     last_responder_type TEXT,
     reopened INTEGER NOT NULL DEFAULT 0,
+    first_response_business_minutes REAL,
+    resolution_business_minutes REAL,
     synced_at TEXT NOT NULL
 );
 
@@ -136,6 +138,8 @@ INSERT OR IGNORE INTO dashboard_config (key, value) VALUES
     ('work_queue_priority_low_weight', '25'),
     ('work_queue_age_weight_per_hour', '1');
 
+CREATE INDEX IF NOT EXISTS idx_tickets_fr_biz_min ON tickets(first_response_business_minutes);
+CREATE INDEX IF NOT EXISTS idx_tickets_res_biz_min ON tickets(resolution_business_minutes);
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_technician_id ON tickets(technician_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_client_id ON tickets(client_id);
@@ -148,6 +152,12 @@ CREATE INDEX IF NOT EXISTS idx_client_contracts_client_id ON client_contracts(cl
 """
 
 
+MIGRATIONS = [
+    "ALTER TABLE tickets ADD COLUMN first_response_business_minutes REAL",
+    "ALTER TABLE tickets ADD COLUMN resolution_business_minutes REAL",
+]
+
+
 class Database:
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -158,9 +168,26 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = await aiosqlite.connect(str(self.db_path))
         self._connection.row_factory = aiosqlite.Row
+        # Run migrations first so columns exist before CREATE INDEX
+        await self._run_migrations()
         await self._connection.executescript(SCHEMA_SQL)
         await self._connection.commit()
         logger.info("Database initialized at %s", self.db_path)
+
+    async def _run_migrations(self):
+        """Apply column-add migrations for existing databases.
+
+        Each statement is wrapped in try/except because SQLite does not
+        support IF NOT EXISTS for ALTER TABLE ADD COLUMN.
+        """
+        for sql in MIGRATIONS:
+            try:
+                await self._connection.execute(sql)
+                await self._connection.commit()
+                logger.info("Migration applied: %s", sql)
+            except Exception:
+                # Column likely already exists; safe to ignore.
+                pass
 
     async def get_connection(self) -> aiosqlite.Connection:
         if self._connection is None:

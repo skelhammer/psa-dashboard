@@ -3,6 +3,7 @@ import { useWorkQueue } from '../api/hooks'
 import { useFilterContext } from '../context/FilterContext'
 import GlobalFilters from '../components/GlobalFilters'
 import TicketTable from '../components/TicketTable'
+import ExportButtons from '../components/ExportButtons'
 
 export default function WorkQueue() {
   const { toParams } = useFilterContext()
@@ -13,13 +14,45 @@ export default function WorkQueue() {
 
   const { data, isLoading } = useWorkQueue(params)
 
+  const queueCsvData = (data?.tickets || []).map((t: any) => ({
+    rank: t.rank,
+    display_id: t.display_id,
+    subject: t.subject,
+    client_name: t.client_name,
+    technician_name: t.technician_name || 'Unassigned',
+    priority: t.priority,
+    status: t.status,
+    created_time: t.created_time,
+    worklog_minutes: t.worklog_minutes,
+    score: t.score,
+  }))
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold">Work Queue</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Prioritized by SLA urgency, then priority, then age. Pick from the top.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Work Queue</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Prioritized by SLA urgency, then priority, then age. Pick from the top.
+          </p>
+        </div>
+        <ExportButtons
+          csvData={queueCsvData}
+          csvFilename="work_queue"
+          csvColumns={[
+            { key: 'rank', label: 'Rank' },
+            { key: 'display_id', label: 'ID' },
+            { key: 'subject', label: 'Subject' },
+            { key: 'client_name', label: 'Client' },
+            { key: 'technician_name', label: 'Tech' },
+            { key: 'priority', label: 'Priority' },
+            { key: 'status', label: 'Status' },
+            { key: 'created_time', label: 'Created' },
+            { key: 'worklog_minutes', label: 'Time (min)' },
+            { key: 'score', label: 'Score' },
+          ]}
+          pageTitle="Work Queue"
+        />
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">

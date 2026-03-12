@@ -11,10 +11,12 @@ from datetime import datetime
 
 import aiosqlite
 
+from app.config import get_settings
 from app.database import Database
 from app.models import Client, ClientContract, Technician, Ticket, TicketFilter
 from app.psa.base import PSAProvider
 from app.sync.hooks import run_post_sync_hooks
+from app.utils.business_hours import calculate_business_minutes
 
 logger = logging.getLogger(__name__)
 
@@ -396,6 +398,41 @@ class SyncEngine:
                 1 if reopened else 0,
                 now,
             ),
+        )
+
+        # Calculate and store business-hours durations
+        await self._update_business_minutes(conn, ticket)
+
+    async def _update_business_minutes(self, conn: aiosqlite.Connection, ticket: Ticket):
+        """Calculate and store business-hours duration metrics for a ticket."""
+        settings = get_settings()
+        bh_config = settings.business_hours
+
+        fr_minutes = None
+        res_minutes = None
+
+        if ticket.first_response_time and ticket.created_time:
+            if bh_config.enabled:
+                fr_minutes = calculate_business_minutes(
+                    ticket.created_time, ticket.first_response_time, bh_config,
+                )
+            else:
+                fr_minutes = (ticket.first_response_time - ticket.created_time).total_seconds() / 60
+
+        if ticket.resolution_time and ticket.created_time:
+            if bh_config.enabled:
+                res_minutes = calculate_business_minutes(
+                    ticket.created_time, ticket.resolution_time, bh_config,
+                )
+            else:
+                res_minutes = (ticket.resolution_time - ticket.created_time).total_seconds() / 60
+
+        await conn.execute(
+            """UPDATE tickets
+               SET first_response_business_minutes = ?,
+                   resolution_business_minutes = ?
+               WHERE id = ?""",
+            (fr_minutes, res_minutes, ticket.id),
         )
 
     async def _sync_technicians(self, conn: aiosqlite.Connection, techs: list[Technician]):

@@ -3,6 +3,7 @@ import { useBillingFlags, useBillingSummary, useResolveFlag } from '../api/hooks
 import { useFilterContext } from '../context/FilterContext'
 import KpiCard from '../components/KpiCard'
 import GlobalFilters from '../components/GlobalFilters'
+import ExportButtons from '../components/ExportButtons'
 import clsx from 'clsx'
 import { PRIORITY_COLORS } from '../utils/constants'
 
@@ -51,11 +52,39 @@ export default function BillingAudit() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold">Billing Audit</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Flags for billable client tickets missing worklogs, with per-client summaries.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Billing Audit</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Flags for billable client tickets missing worklogs, with per-client summaries.
+          </p>
+        </div>
+        <ExportButtons
+          csvData={(flags?.flags || []).map((f: any) => ({
+            flag_type: f.flag_type,
+            display_id: f.display_id,
+            subject: f.subject,
+            client_name: f.client_name,
+            technician_name: f.technician_name || 'Unassigned',
+            priority: f.priority,
+            worklog_hours: f.worklog_minutes > 0 ? (f.worklog_minutes / 60).toFixed(1) : '0',
+            flag_reason: f.flag_reason,
+            resolved: f.resolved ? 'Yes' : 'No',
+          }))}
+          csvFilename="billing_flags"
+          csvColumns={[
+            { key: 'flag_type', label: 'Flag' },
+            { key: 'display_id', label: 'Ticket' },
+            { key: 'subject', label: 'Subject' },
+            { key: 'client_name', label: 'Client' },
+            { key: 'technician_name', label: 'Tech' },
+            { key: 'priority', label: 'Priority' },
+            { key: 'worklog_hours', label: 'Hours' },
+            { key: 'flag_reason', label: 'Reason' },
+            { key: 'resolved', label: 'Resolved' },
+          ]}
+          pageTitle="Billing Audit"
+        />
       </div>
 
       <GlobalFilters />
@@ -194,7 +223,35 @@ export default function BillingAudit() {
       {/* Billable Clients Summary */}
       {summary?.clients?.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-lg font-semibold">Billable Clients</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Billable Clients</h3>
+            <ExportButtons
+              csvData={summary.clients.map((c: any) => ({
+                name: c.name,
+                billing_type: c.billing_type,
+                source: c.auto_detected ? 'Contract' : 'Manual',
+                total_tickets: c.total_tickets,
+                tickets_with_time: c.tickets_with_time,
+                tickets_missing_time: c.tickets_missing_time,
+                missing_pct: c.missing_pct,
+                billed_hours: c.billed_hours,
+                unresolved_flags: c.unresolved_flags,
+              }))}
+              csvFilename="billable_clients"
+              csvColumns={[
+                { key: 'name', label: 'Client' },
+                { key: 'billing_type', label: 'Type' },
+                { key: 'source', label: 'Source' },
+                { key: 'total_tickets', label: 'Tickets' },
+                { key: 'tickets_with_time', label: 'With Time' },
+                { key: 'tickets_missing_time', label: 'Missing' },
+                { key: 'missing_pct', label: 'Missing %' },
+                { key: 'billed_hours', label: 'Hours' },
+                { key: 'unresolved_flags', label: 'Flags' },
+              ]}
+              pageTitle="Billable Clients"
+            />
+          </div>
           <div className="overflow-x-auto rounded-lg border border-gray-800">
             <table className="w-full text-sm">
               <thead>

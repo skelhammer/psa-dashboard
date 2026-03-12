@@ -35,3 +35,85 @@
 .sla-violated-pulse {
   animation: pulse-red 1.5s ease-in-out infinite;
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide sidebar */
+  aside {
+    display: none !important;
+  }
+
+  /* Hide header */
+  header {
+    display: none !important;
+  }
+
+  /* Hide global filters */
+  .flex.items-center.gap-3.flex-wrap:has(select) {
+    display: none !important;
+  }
+
+  /* Hide export buttons */
+  .export-btn {
+    display: none !important;
+  }
+
+  /* Hide interactive elements */
+  input[type="checkbox"],
+  select,
+  button {
+    display: none !important;
+  }
+
+  /* Make main content fill the page */
+  .flex.h-screen {
+    display: block !important;
+  }
+
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  /* Charts fit on page */
+  .recharts-responsive-container {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  /* Cards */
+  .card {
+    background: white !important;
+    border-color: #d1d5db !important;
+    page-break-inside: avoid;
+  }
+
+  /* Page breaks between major sections */
+  .grid {
+    page-break-inside: avoid;
+  }
+
+  .space-y-6 > * + * {
+    page-break-before: auto;
+  }
+
+  /* Table styling for print */
+  table {
+    border-collapse: collapse !important;
+  }
+
+  th, td {
+    border: 1px solid #d1d5db !important;
+    color: black !important;
+  }
+
+  th {
+    background: #f3f4f6 !important;
+  }
+}

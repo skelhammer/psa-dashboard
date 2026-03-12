@@ -96,21 +96,17 @@ async def overview(request: Request, filters: FilterParams = Depends()):
         [week_start.isoformat(), *extra_params],
     )
 
-    # Average first response time (selected period, in minutes)
+    # Average first response time (selected period, in business minutes)
     avg_fr = await conn.execute_fetchall(
-        f"""SELECT AVG(
-            (julianday(first_response_time) - julianday(created_time)) * 24 * 60
-        ) FROM tickets
-        WHERE first_response_time IS NOT NULL AND created_time >= ?{extra_and}""",
+        f"""SELECT AVG(first_response_business_minutes) FROM tickets
+        WHERE first_response_business_minutes IS NOT NULL AND created_time >= ?{extra_and}""",
         [period_start, *extra_params],
     )
 
-    # Average resolution time (selected period, in minutes)
+    # Average resolution time (selected period, in business minutes)
     avg_res = await conn.execute_fetchall(
-        f"""SELECT AVG(
-            (julianday(resolution_time) - julianday(created_time)) * 24 * 60
-        ) FROM tickets
-        WHERE resolution_time IS NOT NULL AND created_time >= ?{extra_and}""",
+        f"""SELECT AVG(resolution_business_minutes) FROM tickets
+        WHERE resolution_business_minutes IS NOT NULL AND created_time >= ?{extra_and}""",
         [period_start, *extra_params],
     )
 
@@ -157,24 +153,95 @@ async def overview(request: Request, filters: FilterParams = Depends()):
         [period_start, *extra_params],
     )
 
+    # --- Period-over-period comparison ---
+    period_length = filters.date_to - filters.date_from
+    prev_end = filters.date_from
+    prev_start = prev_end - period_length
+    prev_start_iso = prev_start.isoformat()
+    prev_end_iso = prev_end.isoformat()
+
+    prev_created = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM tickets WHERE created_time >= ? AND created_time < ?{extra_and}",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_closed = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM tickets WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time < ?{extra_and}",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_avg_fr = await conn.execute_fetchall(
+        f"""SELECT AVG(first_response_business_minutes) FROM tickets
+        WHERE first_response_business_minutes IS NOT NULL AND created_time >= ? AND created_time < ?{extra_and}""",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_avg_res = await conn.execute_fetchall(
+        f"""SELECT AVG(resolution_business_minutes) FROM tickets
+        WHERE resolution_business_minutes IS NOT NULL AND created_time >= ? AND created_time < ?{extra_and}""",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_total_with_sla = await conn.execute_fetchall(
+        f"""SELECT COUNT(*) FROM tickets
+           WHERE created_time >= ? AND created_time < ? AND sla_name IS NOT NULL{extra_and}""",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_violated_sla = await conn.execute_fetchall(
+        f"""SELECT COUNT(*) FROM tickets
+           WHERE created_time >= ? AND created_time < ? AND sla_name IS NOT NULL
+           AND (first_response_violated = 1 OR resolution_violated = 1){extra_and}""",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_total_sla_val = prev_total_with_sla[0][0] or 0
+    prev_violated_val = prev_violated_sla[0][0] or 0
+    prev_sla_compliance = round(((prev_total_sla_val - prev_violated_val) / prev_total_sla_val * 100) if prev_total_sla_val > 0 else 100, 1)
+
+    prev_worklog = await conn.execute_fetchall(
+        f"SELECT SUM(worklog_minutes) FROM tickets WHERE created_time >= ? AND created_time < ?{extra_and}",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_worklog_hours = round((prev_worklog[0][0] or 0) / 60, 1)
+
+    prev_reopened = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM tickets WHERE reopened = 1 AND created_time >= ? AND created_time < ?{extra_and}",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+
+    def pct_change(current, previous):
+        if previous is None or previous == 0:
+            return None
+        return round((current - previous) / previous * 100, 1)
+
+    created_p = created_period[0][0]
+    closed_p = closed_period[0][0]
+    avg_fr_val = round(avg_fr[0][0] or 0, 1)
+    avg_res_val = round(avg_res[0][0] or 0, 1)
+    reopened_val = reopened[0][0]
+
     return {
         "kpis": {
             "total_open": open_count[0][0],
             "created_today": created_today[0][0],
             "created_this_week": created_week[0][0],
-            "created_period": created_period[0][0],
-            "closed_period": closed_period[0][0],
+            "created_period": created_p,
+            "closed_period": closed_p,
             "closed_this_week": closed_week[0][0],
-            "avg_first_response_minutes": round(avg_fr[0][0] or 0, 1),
-            "avg_resolution_minutes": round(avg_res[0][0] or 0, 1),
+            "avg_first_response_minutes": avg_fr_val,
+            "avg_resolution_minutes": avg_res_val,
             "sla_compliance_pct": sla_compliance,
             "total_worklog_hours": total_worklog_hours,
             "unresolved_billing_flags": billing_flags[0][0],
-            "reopened_period": reopened[0][0],
+            "reopened_period": reopened_val,
             "open_vs_closed_ratio": {
                 "opened": created_week[0][0],
                 "closed": closed_week[0][0],
             },
+        },
+        "pct_change": {
+            "created_period": pct_change(created_p, prev_created[0][0]),
+            "closed_period": pct_change(closed_p, prev_closed[0][0]),
+            "avg_first_response_minutes": pct_change(avg_fr_val, round(prev_avg_fr[0][0] or 0, 1)),
+            "avg_resolution_minutes": pct_change(avg_res_val, round(prev_avg_res[0][0] or 0, 1)),
+            "sla_compliance_pct": pct_change(sla_compliance, prev_sla_compliance),
+            "total_worklog_hours": pct_change(total_worklog_hours, prev_worklog_hours),
+            "reopened_period": pct_change(reopened_val, prev_reopened[0][0]),
         },
         "date_range_label": filters.date_range_label,
     }
@@ -295,6 +362,45 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     )
     group_chart = [{"group": r["group_name"], "count": r["count"]} for r in group_dist]
 
+    # SLA compliance trend (last 12 weeks)
+    sla_trend = []
+    for i in range(12, -1, -1):
+        week_end = now - timedelta(weeks=i)
+        week_start = week_end - timedelta(weeks=1)
+        we_iso_sla = week_end.isoformat()
+        ws_iso_sla = week_start.isoformat()
+
+        total_sla_week = await conn.execute_fetchall(
+            f"""SELECT COUNT(*) FROM tickets
+               WHERE created_time >= ? AND created_time < ? AND sla_name IS NOT NULL{extra_and}""",
+            [ws_iso_sla, we_iso_sla, *extra_params],
+        )
+        violated_sla_week = await conn.execute_fetchall(
+            f"""SELECT COUNT(*) FROM tickets
+               WHERE created_time >= ? AND created_time < ? AND sla_name IS NOT NULL
+               AND (first_response_violated = 1 OR resolution_violated = 1){extra_and}""",
+            [ws_iso_sla, we_iso_sla, *extra_params],
+        )
+        total_count = total_sla_week[0][0] or 0
+        violated_count = violated_sla_week[0][0] or 0
+        compliance = round(((total_count - violated_count) / total_count * 100) if total_count > 0 else 100, 1)
+        sla_trend.append({
+            "week": week_end.strftime("%Y-W%W"),
+            "compliance_pct": compliance,
+            "total": total_count,
+            "violated": violated_count,
+        })
+
+    # Category distribution (tickets created in period)
+    period_start = filters.date_from.isoformat()
+    category_dist = await conn.execute_fetchall(
+        f"""SELECT COALESCE(category, 'Uncategorized') as category, COUNT(*) as count
+            FROM tickets WHERE created_time >= ?{extra_and}
+            GROUP BY category ORDER BY count DESC LIMIT 10""",
+        [period_start, *extra_params],
+    )
+    category_chart = [{"category": r["category"], "count": r["count"]} for r in category_dist]
+
     return {
         "volume_trend": volume_trend,
         "backlog_trend": backlog_trend,
@@ -303,4 +409,6 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
         "priority_distribution": priority_chart,
         "workload_balance": workload_chart,
         "group_distribution": group_chart,
+        "sla_trend": sla_trend,
+        "category_distribution": category_chart,
     }

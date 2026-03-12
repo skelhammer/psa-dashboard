@@ -62,6 +62,15 @@ class ThresholdsConfig:
 
 
 @dataclass
+class BusinessHoursConfig:
+    enabled: bool = True
+    start_hour: int = 8
+    end_hour: int = 17
+    work_days: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
+    holidays: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Settings:
     psa: PSAConfig = field(default_factory=PSAConfig)
     sync: SyncConfig = field(default_factory=SyncConfig)
@@ -69,6 +78,7 @@ class Settings:
     server: ServerConfig = field(default_factory=ServerConfig)
     billing: BillingConfig = field(default_factory=BillingConfig)
     thresholds: ThresholdsConfig = field(default_factory=ThresholdsConfig)
+    business_hours: BusinessHoursConfig = field(default_factory=BusinessHoursConfig)
 
     @property
     def db_path(self) -> Path:
@@ -124,6 +134,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
         server=_build_nested(ServerConfig, raw.get("server")),
         billing=billing,
         thresholds=_build_nested(ThresholdsConfig, raw.get("thresholds")),
+        business_hours=_build_nested(BusinessHoursConfig, raw.get("business_hours")),
     )
 
 

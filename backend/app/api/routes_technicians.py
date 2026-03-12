@@ -65,17 +65,17 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
             [tech_id, period_start, period_end, *extra_params],
         )
 
-        # Avg first response time (tickets created in period)
+        # Avg first response time (tickets created in period, business minutes)
         avg_fr = await conn.execute_fetchall(
-            f"""SELECT AVG((julianday(first_response_time) - julianday(created_time)) * 24 * 60)
-               FROM tickets WHERE technician_id = ? AND first_response_time IS NOT NULL AND created_time >= ? AND created_time <= ?{extra_and}""",
+            f"""SELECT AVG(first_response_business_minutes)
+               FROM tickets WHERE technician_id = ? AND first_response_business_minutes IS NOT NULL AND created_time >= ? AND created_time <= ?{extra_and}""",
             [tech_id, period_start, period_end, *extra_params],
         )
 
-        # Avg resolution time (tickets resolved in period)
+        # Avg resolution time (tickets resolved in period, business minutes)
         avg_res = await conn.execute_fetchall(
-            f"""SELECT AVG((julianday(resolution_time) - julianday(created_time)) * 24 * 60)
-               FROM tickets WHERE technician_id = ? AND resolution_time IS NOT NULL AND resolution_time >= ? AND resolution_time <= ?{extra_and}""",
+            f"""SELECT AVG(resolution_business_minutes)
+               FROM tickets WHERE technician_id = ? AND resolution_business_minutes IS NOT NULL AND resolution_time >= ? AND resolution_time <= ?{extra_and}""",
             [tech_id, period_start, period_end, *extra_params],
         )
 

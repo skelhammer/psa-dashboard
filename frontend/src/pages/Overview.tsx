@@ -5,10 +5,11 @@ import { BRAND, CHART_COLORS } from '../utils/constants'
 import KpiCard from '../components/KpiCard'
 import ChartCard from '../components/ChartCard'
 import GlobalFilters from '../components/GlobalFilters'
+import ExportButtons from '../components/ExportButtons'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend,
-  ComposedChart, Area,
+  ComposedChart, Area, ReferenceLine,
 } from 'recharts'
 
 const tooltipStyle = {
@@ -29,15 +30,38 @@ export default function Overview() {
   }
 
   const kpis = data?.kpis
+  const pct = data?.pct_change
   const periodLabel = data?.date_range_label
+
+  const kpiExportData = kpis ? [{
+    'Open Tickets': kpis.total_open,
+    'Created Today': kpis.created_today,
+    'Created This Week': kpis.created_this_week,
+    'Created (Period)': kpis.created_period,
+    'Opened (Week)': kpis.open_vs_closed_ratio?.opened,
+    'Closed (Week)': kpis.open_vs_closed_ratio?.closed,
+    'Avg First Response': kpis.avg_first_response_minutes ? formatDuration(kpis.avg_first_response_minutes) : '-',
+    'Avg Resolution': kpis.avg_resolution_minutes ? formatDuration(kpis.avg_resolution_minutes) : '-',
+    'SLA Compliance %': kpis.sla_compliance_pct,
+    'Worklog Hours': kpis.total_worklog_hours,
+    'Billing Flags': kpis.unresolved_billing_flags,
+    'Reopened': kpis.reopened_period,
+  }] : []
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold">Overview</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          KPIs, volume trends, backlog tracking, and workload balance at a glance.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Overview</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            KPIs, volume trends, backlog tracking, and workload balance at a glance.
+          </p>
+        </div>
+        <ExportButtons
+          csvData={kpiExportData}
+          csvFilename="overview_kpis"
+          pageTitle="Overview"
+        />
       </div>
 
       <GlobalFilters />
@@ -47,7 +71,7 @@ export default function Overview() {
         <KpiCard label="Open Tickets" value={kpis?.total_open ?? '-'} />
         <KpiCard label="Created Today" value={kpis?.created_today ?? '-'} />
         <KpiCard label="Created This Week" value={kpis?.created_this_week ?? '-'} />
-        <KpiCard label="Created (Period)" value={kpis?.created_period ?? '-'} subtitle={periodLabel} />
+        <KpiCard label="Created (Period)" value={kpis?.created_period ?? '-'} subtitle={periodLabel} pctChange={pct?.created_period} changeDirection="up-good" />
         <KpiCard
           label="Open vs Closed (Week)"
           value={`${kpis?.open_vs_closed_ratio?.opened ?? 0} / ${kpis?.open_vs_closed_ratio?.closed ?? 0}`}
@@ -57,14 +81,25 @@ export default function Overview() {
           }
         />
         <KpiCard
+          label="Closed (Period)"
+          value={kpis?.closed_period ?? '-'}
+          subtitle={periodLabel}
+          pctChange={pct?.closed_period}
+          changeDirection="up-good"
+        />
+        <KpiCard
           label="Avg First Response"
           value={kpis?.avg_first_response_minutes ? formatDuration(kpis.avg_first_response_minutes) : '-'}
           subtitle={periodLabel}
+          pctChange={pct?.avg_first_response_minutes}
+          changeDirection="down-good"
         />
         <KpiCard
           label="Avg Resolution"
           value={kpis?.avg_resolution_minutes ? formatDuration(kpis.avg_resolution_minutes) : '-'}
           subtitle={periodLabel}
+          pctChange={pct?.avg_resolution_minutes}
+          changeDirection="down-good"
         />
         <KpiCard
           label="SLA Compliance"
@@ -74,11 +109,15 @@ export default function Overview() {
             (kpis?.sla_compliance_pct ?? 100) >= 95 ? 'border-green-500/30' :
             (kpis?.sla_compliance_pct ?? 100) >= 80 ? 'border-yellow-500/30' : 'border-red-500/30'
           }
+          pctChange={pct?.sla_compliance_pct}
+          changeDirection="up-good"
         />
         <KpiCard
           label="Worklog Hours"
           value={kpis?.total_worklog_hours ?? '-'}
           subtitle={periodLabel}
+          pctChange={pct?.total_worklog_hours}
+          changeDirection="up-good"
         />
         <KpiCard
           label="Billing Flags"
@@ -89,13 +128,15 @@ export default function Overview() {
           label="Reopened"
           value={kpis?.reopened_period ?? 0}
           subtitle={periodLabel}
+          pctChange={pct?.reopened_period}
+          changeDirection="down-good"
         />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Volume Trend */}
-        <ChartCard title="Ticket Volume (Last 30 Days)">
+        <ChartCard title="Ticket Volume (Last 30 Days)" exportData={charts?.volume_trend} exportFilename="volume_trend">
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={charts?.volume_trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -108,7 +149,7 @@ export default function Overview() {
         </ChartCard>
 
         {/* Backlog Trend */}
-        <ChartCard title="Backlog Trend (12 Weeks)">
+        <ChartCard title="Backlog Trend (12 Weeks)" exportData={charts?.backlog_trend} exportFilename="backlog_trend">
           <ResponsiveContainer width="100%" height={250}>
             <ComposedChart data={charts?.backlog_trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -123,7 +164,7 @@ export default function Overview() {
         </ChartCard>
 
         {/* Aging Buckets */}
-        <ChartCard title="Ticket Aging (Open Tickets)">
+        <ChartCard title="Ticket Aging (Open Tickets)" exportData={charts?.aging_buckets} exportFilename="ticket_aging">
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={charts?.aging_buckets || []} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -136,7 +177,7 @@ export default function Overview() {
         </ChartCard>
 
         {/* Workload Balance */}
-        <ChartCard title="Workload Balance">
+        <ChartCard title="Workload Balance" exportData={charts?.workload_balance} exportFilename="workload_balance">
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={charts?.workload_balance || []} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -153,7 +194,7 @@ export default function Overview() {
         </ChartCard>
 
         {/* Group Distribution */}
-        <ChartCard title="Open Tickets by Group">
+        <ChartCard title="Open Tickets by Group" exportData={charts?.group_distribution} exportFilename="group_distribution">
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={charts?.group_distribution || []} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -170,7 +211,7 @@ export default function Overview() {
         </ChartCard>
 
         {/* Status Distribution */}
-        <ChartCard title="Tickets by Status">
+        <ChartCard title="Tickets by Status" exportData={charts?.status_distribution} exportFilename="status_distribution">
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
@@ -194,7 +235,7 @@ export default function Overview() {
         </ChartCard>
 
         {/* Priority Distribution */}
-        <ChartCard title="Tickets by Priority">
+        <ChartCard title="Tickets by Priority" exportData={charts?.priority_distribution} exportFilename="priority_distribution">
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={charts?.priority_distribution || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -210,6 +251,33 @@ export default function Overview() {
                   return <Cell key={i} fill={colors[entry.priority] || BRAND.gold} />
                 })}
               </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        {/* SLA Compliance Trend */}
+        <ChartCard title="SLA Compliance Trend (12 Weeks)" exportData={charts?.sla_trend} exportFilename="sla_trend">
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={charts?.sla_trend || []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#6b7280' }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#6b7280' }} />
+              <Tooltip {...tooltipStyle} />
+              <ReferenceLine y={95} stroke="#34D399" strokeDasharray="3 3" label={{ value: "95% Target", fill: "#34D399", fontSize: 10 }} />
+              <Line type="monotone" dataKey="compliance_pct" stroke={BRAND.gold} strokeWidth={2} dot={{ fill: BRAND.gold }} name="SLA %" />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        {/* Top Categories */}
+        <ChartCard title="Top Categories (Period)" exportData={charts?.category_distribution} exportFilename="category_distribution">
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={charts?.category_distribution || []} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
+              <YAxis dataKey="category" type="category" tick={{ fontSize: 11, fill: '#9ca3af' }} width={120} />
+              <Tooltip {...tooltipStyle} />
+              <Bar dataKey="count" fill={BRAND.gold} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
