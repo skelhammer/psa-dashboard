@@ -32,7 +32,7 @@ export default function ClientHealth() {
   const periodLabel = data?.date_range_label || ''
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-slide-up">
       <div>
         <h2 className="text-xl font-bold">Client Health</h2>
         <p className="text-sm text-gray-500 mt-1">
@@ -42,10 +42,10 @@ export default function ClientHealth() {
 
       <GlobalFilters />
 
-      <div className="overflow-x-auto rounded-lg border border-gray-800">
+      <div className="overflow-x-auto rounded-lg border border-zinc-800">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-900/80 border-b border-gray-800">
+            <tr className="bg-zinc-900/80 border-b border-zinc-800">
               {[
                 'Client Name', 'Health', 'Open', 'Closed', 'SLA %',
                 'Avg FR', 'Avg Resolution', 'Hours'
@@ -61,9 +61,9 @@ export default function ClientHealth() {
               <tr
                 key={client.id}
                 onClick={() => navigate(`/clients/${client.id}`)}
-                className="hover:bg-gray-800/30 transition-colors cursor-pointer"
+                className="hover:bg-zinc-800/30 transition-colors cursor-pointer"
               >
-                <td className="px-3 py-2.5 font-medium text-brand-gold">{client.name}</td>
+                <td className="px-3 py-2.5 font-medium text-brand-primary-light">{client.name}</td>
                 <td className="px-3 py-2.5">
                   {healthBadge(client.health_score, client.health_color)}
                 </td>

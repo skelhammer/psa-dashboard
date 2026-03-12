@@ -411,10 +411,12 @@ class SyncEngine:
         fr_minutes = None
         res_minutes = None
 
+        tz_name = settings.server.timezone
+
         if ticket.first_response_time and ticket.created_time:
             if bh_config.enabled:
                 fr_minutes = calculate_business_minutes(
-                    ticket.created_time, ticket.first_response_time, bh_config,
+                    ticket.created_time, ticket.first_response_time, bh_config, tz_name,
                 )
             else:
                 fr_minutes = (ticket.first_response_time - ticket.created_time).total_seconds() / 60
@@ -422,7 +424,7 @@ class SyncEngine:
         if ticket.resolution_time and ticket.created_time:
             if bh_config.enabled:
                 res_minutes = calculate_business_minutes(
-                    ticket.created_time, ticket.resolution_time, bh_config,
+                    ticket.created_time, ticket.resolution_time, bh_config, tz_name,
                 )
             else:
                 res_minutes = (ticket.resolution_time - ticket.created_time).total_seconds() / 60

@@ -1,14 +1,18 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useSyncStatus, useTriggerSync, useTriggerFullSync } from '../api/hooks'
+import {
+  LayoutDashboard, Target, ListOrdered, Users, Receipt, Building2,
+  RefreshCw, RefreshCcw, Zap
+} from 'lucide-react'
 import clsx from 'clsx'
 
 const navItems = [
-  { to: '/', label: 'Overview', icon: '📊' },
-  { to: '/manage-to-zero', label: 'Manage to Zero', icon: '🎯' },
-  { to: '/work-queue', label: 'Work Queue', icon: '📋' },
-  { to: '/technicians', label: 'Technicians', icon: '👥' },
-  { to: '/billing', label: 'Billing Audit', icon: '💰' },
-  { to: '/clients', label: 'Client Health', icon: '🏢' },
+  { to: '/', label: 'Overview', icon: LayoutDashboard },
+  { to: '/manage-to-zero', label: 'Manage to Zero', icon: Target },
+  { to: '/work-queue', label: 'Work Queue', icon: ListOrdered },
+  { to: '/technicians', label: 'Technicians', icon: Users },
+  { to: '/billing', label: 'Billing Audit', icon: Receipt },
+  { to: '/clients', label: 'Client Health', icon: Building2 },
 ]
 
 export default function Layout() {
@@ -22,80 +26,100 @@ export default function Layout() {
     : 'Never'
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-[#09090B]">
       {/* Sidebar */}
-      <aside className="w-60 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
+      <aside className="w-[220px] flex flex-col shrink-0 border-r border-white/[0.06] bg-[#09090B]">
         {/* Logo */}
-        <div className="p-5 border-b border-gray-800">
-          <h1 className="text-lg font-bold tracking-tight">
-            <span className="text-brand-gold">PSA</span>
-            <span className="text-gray-400 font-normal ml-1.5">Dashboard</span>
-          </h1>
+        <div className="px-5 py-5 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <Zap size={16} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold tracking-tight text-white">PSA Dashboard</h1>
+              <p className="text-[10px] text-gray-500 font-medium">Service Metrics</p>
+            </div>
+          </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-3 space-y-1">
-          {navItems.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                clsx(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-                  isActive
-                    ? 'bg-brand-gold/10 text-brand-gold border border-brand-gold/20'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
-                )
-              }
-            >
-              <span className="text-base">{item.icon}</span>
-              {item.label}
-            </NavLink>
-          ))}
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {navItems.map(item => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  clsx(
+                    'group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150',
+                    isActive
+                      ? 'bg-brand-primary/10 text-brand-primary-light'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon size={18} className={clsx(
+                      'transition-colors duration-150',
+                      isActive ? 'text-brand-primary' : 'text-gray-600 group-hover:text-gray-400'
+                    )} />
+                    {item.label}
+                  </>
+                )}
+              </NavLink>
+            )
+          })}
         </nav>
 
         {/* Provider info */}
-        <div className="p-4 border-t border-gray-800 text-xs text-gray-600">
-          Data source: {syncStatus?.provider || '...'}
+        <div className="px-5 py-3 border-t border-white/[0.06]">
+          <p className="text-[10px] text-gray-600 font-medium">
+            {syncStatus?.provider || '...'}
+          </p>
         </div>
       </aside>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="h-14 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between px-6 shrink-0">
-          <div />
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-gray-500">
-              Last synced: {lastSync}
-              {syncStatus?.is_syncing && (
-                <span className="ml-2 text-brand-gold animate-pulse">Syncing...</span>
-              )}
-            </span>
+        <header className="h-12 border-b border-white/[0.06] flex items-center justify-end px-6 shrink-0 bg-[#09090B]/80 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[11px] text-gray-500">
+              <div className={clsx(
+                'w-1.5 h-1.5 rounded-full',
+                syncStatus?.is_syncing ? 'bg-blue-400 animate-pulse' : 'bg-emerald-400'
+              )} />
+              {syncStatus?.is_syncing ? 'Syncing...' : `Synced ${lastSync}`}
+            </div>
+            <div className="w-px h-4 bg-white/[0.06]" />
             <button
               onClick={() => triggerSync.mutate()}
               disabled={anySyncing}
               className={clsx(
-                'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-150',
                 anySyncing
-                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                  : 'bg-brand-gold/10 text-brand-gold border border-brand-gold/30 hover:bg-brand-gold/20'
+                  ? 'text-gray-600 cursor-not-allowed'
+                  : 'text-gray-400 hover:text-brand-primary hover:bg-brand-primary/10'
               )}
             >
-              {triggerSync.isPending ? 'Syncing...' : 'Sync Now'}
+              <RefreshCw size={12} className={anySyncing ? 'animate-spin' : ''} />
+              Sync
             </button>
             <button
               onClick={() => triggerFullSync.mutate()}
               disabled={anySyncing}
               className={clsx(
-                'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-150',
                 anySyncing
-                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                  : 'bg-gray-700/50 text-gray-400 border border-gray-600/30 hover:bg-gray-700 hover:text-gray-300'
+                  ? 'text-gray-600 cursor-not-allowed'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]'
               )}
             >
-              {triggerFullSync.isPending ? 'Full Syncing...' : 'Full Sync'}
+              <RefreshCcw size={12} />
+              Full
             </button>
           </div>
         </header>

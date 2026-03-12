@@ -97,10 +97,10 @@ export function useTechnicians(params?: Record<string, string>) {
   })
 }
 
-export function useTechnicianDetail(techId: string | undefined) {
+export function useTechnicianDetail(techId: string | undefined, params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['technician', techId],
-    queryFn: () => api.get(`/technicians/${techId}`).then(r => r.data),
+    queryKey: ['technician', techId, params],
+    queryFn: () => api.get(`/technicians/${techId}`, { params }).then(r => r.data),
     enabled: !!techId,
   })
 }

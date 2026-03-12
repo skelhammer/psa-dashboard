@@ -99,14 +99,14 @@ async def overview(request: Request, filters: FilterParams = Depends()):
     # Average first response time (selected period, in business minutes)
     avg_fr = await conn.execute_fetchall(
         f"""SELECT AVG(first_response_business_minutes) FROM tickets
-        WHERE first_response_business_minutes IS NOT NULL AND created_time >= ?{extra_and}""",
+        WHERE first_response_business_minutes > 0 AND created_time >= ?{extra_and}""",
         [period_start, *extra_params],
     )
 
     # Average resolution time (selected period, in business minutes)
     avg_res = await conn.execute_fetchall(
         f"""SELECT AVG(resolution_business_minutes) FROM tickets
-        WHERE resolution_business_minutes IS NOT NULL AND created_time >= ?{extra_and}""",
+        WHERE resolution_business_minutes > 0 AND created_time >= ?{extra_and}""",
         [period_start, *extra_params],
     )
 
@@ -170,12 +170,12 @@ async def overview(request: Request, filters: FilterParams = Depends()):
     )
     prev_avg_fr = await conn.execute_fetchall(
         f"""SELECT AVG(first_response_business_minutes) FROM tickets
-        WHERE first_response_business_minutes IS NOT NULL AND created_time >= ? AND created_time < ?{extra_and}""",
+        WHERE first_response_business_minutes > 0 AND created_time >= ? AND created_time < ?{extra_and}""",
         [prev_start_iso, prev_end_iso, *extra_params],
     )
     prev_avg_res = await conn.execute_fetchall(
         f"""SELECT AVG(resolution_business_minutes) FROM tickets
-        WHERE resolution_business_minutes IS NOT NULL AND created_time >= ? AND created_time < ?{extra_and}""",
+        WHERE resolution_business_minutes > 0 AND created_time >= ? AND created_time < ?{extra_and}""",
         [prev_start_iso, prev_end_iso, *extra_params],
     )
     prev_total_with_sla = await conn.execute_fetchall(

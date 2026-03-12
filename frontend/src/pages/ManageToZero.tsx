@@ -26,7 +26,7 @@ export default function ManageToZero() {
   const cards = data?.cards || {}
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-slide-up">
       <div>
         <h2 className="text-xl font-bold">Manage to Zero</h2>
         <p className="text-sm text-gray-500 mt-1">Drive all numbers to zero by end of day.</p>
@@ -44,8 +44,8 @@ export default function ManageToZero() {
               className={clsx(
                 'rounded-lg p-4 text-left transition-all',
                 isActive
-                  ? 'ring-2 ring-brand-gold border border-brand-gold/40 bg-brand-gold/5'
-                  : 'border border-gray-800 bg-gray-900 hover:border-gray-700'
+                  ? 'ring-2 ring-brand-primary border border-brand-primary/40 bg-brand-primary/5'
+                  : 'border border-zinc-800 bg-zinc-900 hover:border-zinc-700'
               )}
             >
               <p className={clsx('text-3xl font-bold tabular-nums', zeroTargetTextColor(count))}>
@@ -66,7 +66,7 @@ export default function ManageToZero() {
               {CARDS.find(c => c.key === activeCard)?.label} Tickets
             </h3>
             {drilldown?.count !== undefined && (
-              <span className="text-xs bg-gray-800 px-2 py-0.5 rounded-full text-gray-400">
+              <span className="text-xs bg-zinc-800 px-2 py-0.5 rounded-full text-gray-400">
                 {drilldown.count} tickets
               </span>
             )}

@@ -153,22 +153,18 @@ async def clients_list(request: Request, filters: FilterParams = Depends()):
         violated = violated_sla[0][0] or 0
         sla_compliance = round(((total_sla - violated) / total_sla * 100) if total_sla > 0 else 100, 1)
 
-        # Average first response time
+        # Average first response time (business hours)
         avg_fr = await conn.execute_fetchall(
-            f"""SELECT AVG(
-                (julianday(first_response_time) - julianday(created_time)) * 24 * 60
-            ) FROM tickets
-            WHERE client_id = ? AND first_response_time IS NOT NULL
+            f"""SELECT AVG(first_response_business_minutes) FROM tickets
+            WHERE client_id = ? AND first_response_business_minutes > 0
             AND created_time >= ? AND created_time <= ?{extra_and}""",
             [client_id, period_start, period_end, *extra_params],
         )
 
-        # Average resolution time
+        # Average resolution time (business hours)
         avg_res = await conn.execute_fetchall(
-            f"""SELECT AVG(
-                (julianday(resolution_time) - julianday(created_time)) * 24 * 60
-            ) FROM tickets
-            WHERE client_id = ? AND resolution_time IS NOT NULL
+            f"""SELECT AVG(resolution_business_minutes) FROM tickets
+            WHERE client_id = ? AND resolution_business_minutes > 0
             AND created_time >= ? AND created_time <= ?{extra_and}""",
             [client_id, period_start, period_end, *extra_params],
         )

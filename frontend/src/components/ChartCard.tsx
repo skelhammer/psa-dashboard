@@ -1,4 +1,6 @@
 import { ReactNode } from 'react'
+import { Download } from 'lucide-react'
+import clsx from 'clsx'
 import { exportChartDataAsCSV } from '../utils/export'
 
 interface ChartCardProps {
@@ -17,18 +19,16 @@ export default function ChartCard({ title, children, className, exportData, expo
   }
 
   return (
-    <div className={`card ${className || ''}`}>
+    <div className={clsx('card animate-fade-in', className)}>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-gray-400">{title}</h3>
+        <h3 className="text-sm font-semibold text-gray-400">{title}</h3>
         {exportData && exportData.length > 0 && (
           <button
             onClick={handleExport}
-            className="text-gray-600 hover:text-gray-400 transition-colors export-btn"
+            className="text-gray-600 hover:text-brand-primary transition-colors export-btn p-1 rounded-md hover:bg-white/5"
             title="Download chart data as CSV"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
-            </svg>
+            <Download size={14} />
           </button>
         )}
       </div>

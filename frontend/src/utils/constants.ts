@@ -21,15 +21,16 @@ export const STATUS_COLORS: Record<string, string> = {
 }
 
 export const BRAND = {
-  gold: '#B49B7F',
-  goldLight: '#C9B59A',
-  goldDark: '#9A8369',
-  black: '#000000',
+  primary: '#3B82F6',
+  primaryLight: '#60A5FA',
+  primaryDark: '#2563EB',
+  accent: '#06B6D4',
+  accentLight: '#22D3EE',
 }
 
 export const CHART_COLORS = [
-  '#B49B7F', '#60A5FA', '#34D399', '#F87171',
-  '#A78BFA', '#FBBF24', '#F472B6', '#2DD4BF',
+  '#3B82F6', '#06B6D4', '#10B981', '#F59E0B',
+  '#8B5CF6', '#EC4899', '#F97316', '#14B8A6',
 ]
 
 export const DATE_RANGE_OPTIONS = [

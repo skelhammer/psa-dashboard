@@ -17,9 +17,9 @@ export default function KpiCard({ label, value, subtitle, colorClass, onClick, p
     const isPositive = pctChange > 0
     arrow = isPositive ? '\u2191' : '\u2193'
     if (changeDirection === 'up-good') {
-      changeColor = isPositive ? 'text-green-400' : 'text-red-400'
+      changeColor = isPositive ? 'text-emerald-400' : 'text-red-400'
     } else if (changeDirection === 'down-good') {
-      changeColor = isPositive ? 'text-red-400' : 'text-green-400'
+      changeColor = isPositive ? 'text-red-400' : 'text-emerald-400'
     }
   }
 
@@ -27,19 +27,23 @@ export default function KpiCard({ label, value, subtitle, colorClass, onClick, p
     <div
       onClick={onClick}
       className={clsx(
-        'card',
-        onClick && 'card-hover',
-        colorClass
+        'group relative overflow-hidden rounded-xl border p-4 transition-all duration-200 animate-fade-in',
+        'bg-[#111113]/80 backdrop-blur-sm shadow-lg shadow-black/20',
+        onClick && 'cursor-pointer hover:shadow-xl hover:-translate-y-0.5',
+        colorClass || 'border-white/[0.06] hover:border-brand-primary/30',
       )}
     >
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">{label}</p>
-      <p className="text-2xl font-bold tabular-nums">{value}</p>
-      {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
-      {pctChange != null && pctChange !== 0 && (
-        <p className={clsx('text-xs font-medium mt-1', changeColor)}>
-          {arrow} {pctChange > 0 ? '+' : ''}{pctChange}% vs prev period
-        </p>
-      )}
+      <div className="absolute inset-0 bg-gradient-to-br from-brand-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="relative">
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2">{label}</p>
+        <p className="text-2xl font-bold tabular-nums tracking-tight">{value}</p>
+        {subtitle && <p className="text-[11px] text-gray-500 mt-1.5">{subtitle}</p>}
+        {pctChange != null && pctChange !== 0 && (
+          <p className={clsx('text-xs font-semibold mt-1.5 tabular-nums', changeColor)}>
+            {arrow} {pctChange > 0 ? '+' : ''}{pctChange}% vs prev
+          </p>
+        )}
+      </div>
     </div>
   )
 }

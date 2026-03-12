@@ -28,7 +28,7 @@ export default function WorkQueue() {
   }))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-slide-up">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Work Queue</h2>
@@ -63,7 +63,7 @@ export default function WorkQueue() {
             type="checkbox"
             checked={unassignedOnly}
             onChange={e => setUnassignedOnly(e.target.checked)}
-            className="rounded border-gray-600 bg-gray-800 text-brand-gold focus:ring-brand-gold/50"
+            className="rounded border-zinc-600 bg-zinc-800 text-brand-primary-light focus:ring-brand-primary/50"
           />
           Unassigned only
         </label>

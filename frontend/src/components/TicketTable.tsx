@@ -48,7 +48,7 @@ const defaultColumns: Column[] = [
         href={t.url || '#'}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-brand-gold hover:text-brand-gold-light font-mono text-xs"
+        className="text-brand-primary-light hover:text-brand-primary-light font-mono text-xs"
       >
         {t.display_id}
       </a>
@@ -164,10 +164,10 @@ export default function TicketTable({ tickets, showRank, showScore, emptyMessage
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-800">
+    <div className="overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-gray-900/80 border-b border-gray-800">
+          <tr className="bg-zinc-900/80 border-b border-zinc-800">
             {showRank && <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500">#</th>}
             {defaultColumns.map(col => (
               <th
@@ -180,7 +180,7 @@ export default function TicketTable({ tickets, showRank, showScore, emptyMessage
               >
                 {col.label}
                 {sortKey === col.key && (
-                  <span className="ml-1 text-brand-gold">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                  <span className="ml-1 text-brand-primary-light">{sortDir === 'asc' ? '↑' : '↓'}</span>
                 )}
               </th>
             ))}
@@ -191,7 +191,7 @@ export default function TicketTable({ tickets, showRank, showScore, emptyMessage
           {sorted.map((ticket, i) => (
             <tr
               key={ticket.id}
-              className="hover:bg-gray-800/30 transition-colors"
+              className="hover:bg-zinc-800/30 transition-colors"
             >
               {showRank && (
                 <td className="px-3 py-2.5 text-xs text-gray-500 font-mono">

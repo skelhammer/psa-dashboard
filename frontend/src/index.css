@@ -4,26 +4,37 @@
 
 @layer base {
   body {
-    @apply bg-gray-950 text-gray-100 antialiased;
+    @apply bg-[#09090B] text-gray-100 antialiased;
+    font-feature-settings: 'cv11', 'ss01';
   }
 
   ::-webkit-scrollbar {
-    @apply w-2;
+    @apply w-1.5;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-gray-900;
+    @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-700 rounded;
+    @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-gray-900 border border-gray-800 rounded-lg p-4;
+    @apply bg-[#111113]/80 backdrop-blur-sm border border-white/[0.06] rounded-xl p-4 shadow-lg shadow-black/20;
   }
   .card-hover {
-    @apply card hover:border-brand-gold/30 transition-colors cursor-pointer;
+    @apply card hover:shadow-xl transition-all duration-200 cursor-pointer;
+  }
+  .card-hover:hover {
+    border-color: rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.05);
+  }
+  select option {
+    @apply bg-zinc-900 text-gray-200;
+  }
+  .glass {
+    @apply bg-white/[0.03] backdrop-blur-md border border-white/[0.06] rounded-xl;
   }
 }
 
@@ -36,6 +47,7 @@
   animation: pulse-red 1.5s ease-in-out infinite;
 }
 
+/* KEEP ALL PRINT STYLES BELOW THIS LINE - copy them exactly from the original file */
 @media print {
   body {
     background: white !important;

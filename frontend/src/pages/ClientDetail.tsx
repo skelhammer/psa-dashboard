@@ -15,7 +15,7 @@ const tooltipStyle = {
   contentStyle: { backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#e5e7eb' },
   labelStyle: { color: '#9ca3af' },
   itemStyle: { color: '#d1d5db' },
-  cursor: { fill: 'rgba(180, 155, 127, 0.1)' },
+  cursor: { fill: 'rgba(59, 130, 246, 0.1)' },
 }
 
 export default function ClientDetail() {
@@ -33,7 +33,7 @@ export default function ClientDetail() {
   const periodLabel = data?.date_range_label
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-slide-up">
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/clients')}
@@ -42,7 +42,7 @@ export default function ClientDetail() {
           &larr; Back
         </button>
         <h2 className="text-xl font-bold">{client?.name}</h2>
-        <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{client?.stage}</span>
+        <span className="text-xs text-gray-500 bg-zinc-800 px-2 py-0.5 rounded-full">{client?.stage}</span>
       </div>
 
       {/* KPI Cards */}
@@ -79,14 +79,14 @@ export default function ClientDetail() {
             <LineChart data={data?.sla_trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} domain={[0, 100]} />
+              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} domain={['dataMin - 5', 100]} tickFormatter={(v: number) => `${v}%`} />
               <Tooltip {...tooltipStyle} />
               <Line
                 type="monotone"
                 dataKey="compliance_pct"
-                stroke={BRAND.gold}
+                stroke={BRAND.primary}
                 strokeWidth={2}
-                dot={{ fill: BRAND.gold, r: 3 }}
+                dot={{ fill: BRAND.primary, r: 3 }}
                 name="SLA %"
               />
             </LineChart>
@@ -130,7 +130,7 @@ export default function ClientDetail() {
               <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
               <YAxis dataKey="technician" type="category" tick={{ fontSize: 11, fill: '#9ca3af' }} width={100} />
               <Tooltip {...tooltipStyle} />
-              <Bar dataKey="count" fill={BRAND.gold} radius={[0, 4, 4, 0]} />
+              <Bar dataKey="count" fill={BRAND.primary} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

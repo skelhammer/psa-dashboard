@@ -34,7 +34,7 @@ export default function BillingAudit() {
   const periodLabel = summary?.date_range_label || ''
 
   const selectClass =
-    'bg-gray-800 border border-gray-700 rounded-md px-2.5 py-1.5 text-xs text-gray-300 focus:border-brand-gold/50 focus:outline-none'
+    'bg-zinc-800 border border-zinc-700 rounded-md px-2.5 py-1.5 text-xs text-gray-300 focus:border-brand-primary/50 focus:outline-none'
 
   const handleResolve = (flagId: number) => {
     if (!resolveNote.trim()) return
@@ -51,7 +51,7 @@ export default function BillingAudit() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-slide-up">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Billing Audit</h2>
@@ -115,7 +115,7 @@ export default function BillingAudit() {
             type="checkbox"
             checked={showResolved}
             onChange={e => setShowResolved(e.target.checked)}
-            className="rounded border-gray-600 bg-gray-800"
+            className="rounded border-zinc-600 bg-zinc-800"
           />
           Show resolved
         </label>
@@ -134,10 +134,10 @@ export default function BillingAudit() {
       {isLoading ? (
         <div className="text-gray-500">Loading...</div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-800">
+        <div className="overflow-x-auto rounded-lg border border-zinc-800">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-900/80 border-b border-gray-800">
+              <tr className="bg-zinc-900/80 border-b border-zinc-800">
                 {['Flag', 'Ticket', 'Subject', 'Client', 'Tech', 'Priority', 'Time', 'Reason', 'Action'].map(h => (
                   <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                 ))}
@@ -145,14 +145,14 @@ export default function BillingAudit() {
             </thead>
             <tbody className="divide-y divide-gray-800/50">
               {(flags?.flags || []).map((flag: any) => (
-                <tr key={flag.id} className="hover:bg-gray-800/30 transition-colors">
+                <tr key={flag.id} className="hover:bg-zinc-800/30 transition-colors">
                   <td className="px-3 py-2.5">
                     <span className={clsx('px-2 py-0.5 rounded-full text-xs font-medium border', FLAG_TYPE_COLORS[flag.flag_type] || '')}>
                       {flag.flag_type.replace('_', ' ')}
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <a href={flag.url} target="_blank" rel="noopener noreferrer" className="text-brand-gold hover:text-brand-gold-light font-mono text-xs">
+                    <a href={flag.url} target="_blank" rel="noopener noreferrer" className="text-brand-primary-light hover:text-brand-primary-light font-mono text-xs">
                       {flag.display_id}
                     </a>
                   </td>
@@ -177,7 +177,7 @@ export default function BillingAudit() {
                             value={resolveNote}
                             onChange={e => setResolveNote(e.target.value)}
                             placeholder="Resolution note..."
-                            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-40"
+                            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs w-40"
                             onKeyDown={e => e.key === 'Enter' && handleResolve(flag.id)}
                           />
                           <button
@@ -196,7 +196,7 @@ export default function BillingAudit() {
                       ) : (
                         <button
                           onClick={() => setResolveId(flag.id)}
-                          className="text-xs text-brand-gold hover:text-brand-gold-light"
+                          className="text-xs text-brand-primary-light hover:text-brand-primary-light"
                         >
                           Resolve
                         </button>
@@ -252,10 +252,10 @@ export default function BillingAudit() {
               pageTitle="Billable Clients"
             />
           </div>
-          <div className="overflow-x-auto rounded-lg border border-gray-800">
+          <div className="overflow-x-auto rounded-lg border border-zinc-800">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-900/80 border-b border-gray-800">
+                <tr className="bg-zinc-900/80 border-b border-zinc-800">
                   {['Client', 'Type', 'Source', 'Tickets', 'With Time', 'Missing', 'Missing %', 'Hours', 'Flags'].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
@@ -263,7 +263,7 @@ export default function BillingAudit() {
               </thead>
               <tbody className="divide-y divide-gray-800/50">
                 {summary.clients.map((c: any) => (
-                  <tr key={c.client_id} className="hover:bg-gray-800/30">
+                  <tr key={c.client_id} className="hover:bg-zinc-800/30">
                     <td className="px-3 py-2.5 font-medium">{c.name}</td>
                     <td className="px-3 py-2.5 text-xs">{c.billing_type}</td>
                     <td className="px-3 py-2.5">
