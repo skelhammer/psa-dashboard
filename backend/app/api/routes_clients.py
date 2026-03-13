@@ -180,7 +180,7 @@ async def clients_list(request: Request, filters: FilterParams = Depends()):
 
         # Reopened count
         reopened = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND reopened = 1 AND created_time >= ? AND created_time <= ?{extra_and}",
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND reopened = 1 AND updated_time >= ? AND updated_time <= ?{extra_and}",
             [client_id, period_start, period_end, *extra_params],
         )
 

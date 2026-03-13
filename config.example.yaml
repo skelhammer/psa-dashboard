@@ -22,13 +22,12 @@ server:
   timezone: America/Los_Angeles  # IANA timezone for date calculations and display
 
 billing:
-  # Client plan names (from PSA tags/fields) that indicate hourly billing.
-  # Clients with these plans will be auto-flagged for billing audit.
-  hourly_plans: []
-  # Example: hourly_plans: ["Plan A", "Plan B"]
+  hourly_plans: []  # Deprecated; kept for backwards compatibility. No longer used.
   unlimited_plans: []
-  # Plans that should never be billed (unlimited/managed clients)
-  # Example: unlimited_plans: ["Plan C", "Plan D"]
+  # Whitelist of contract names for unlimited/managed clients.
+  # Clients with an active contract matching these names are excluded from billing.
+  # All other active clients are treated as hourly (billable).
+  # Example: unlimited_plans: ["MSP Platinum", "MSP Premium"]
 
 thresholds:
   stale_ticket_days: 3

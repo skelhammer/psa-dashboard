@@ -41,4 +41,5 @@ export const DATE_RANGE_OPTIONS = [
   { value: 'this_year', label: 'This Year' },
   { value: 'last_30', label: 'Last 30 Days' },
   { value: 'last_90', label: 'Last 90 Days' },
+  { value: 'custom', label: 'Custom Range' },
 ]

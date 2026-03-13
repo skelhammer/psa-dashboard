@@ -29,7 +29,7 @@ export default function WorkQueue() {
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <div className="flex items-center justify-between">
+      <div className="page-header flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Work Queue</h2>
           <p className="text-sm text-gray-500 mt-1">

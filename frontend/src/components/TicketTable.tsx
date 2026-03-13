@@ -2,6 +2,7 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import { PRIORITY_COLORS, STATUS_COLORS } from '../utils/constants'
 import { formatAge, formatWorklogHours } from '../utils/formatting'
+import { ChevronUp, ChevronDown, Inbox } from 'lucide-react'
 import SlaCountdown from './SlaCountdown'
 
 interface Ticket {
@@ -48,7 +49,7 @@ const defaultColumns: Column[] = [
         href={t.url || '#'}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-brand-primary-light hover:text-brand-primary-light font-mono text-xs"
+        className="text-brand-primary-light hover:text-brand-primary hover:underline font-mono text-xs transition-colors"
       >
         {t.display_id}
       </a>
@@ -86,7 +87,7 @@ const defaultColumns: Column[] = [
     label: 'Status',
     sortable: true,
     render: (t) => (
-      <span className={clsx('text-xs', STATUS_COLORS[t.status] || 'text-gray-400')}>
+      <span className={clsx('text-xs font-medium', STATUS_COLORS[t.status] || 'text-gray-400')}>
         {t.status}
       </span>
     ),
@@ -95,7 +96,7 @@ const defaultColumns: Column[] = [
     key: 'age',
     label: 'Age',
     sortable: true,
-    render: (t) => <span className="text-xs tabular-nums">{formatAge(t.created_time)}</span>,
+    render: (t) => <span className="text-xs tabular-nums text-gray-400">{formatAge(t.created_time)}</span>,
   },
   {
     key: 'sla',
@@ -157,54 +158,59 @@ export default function TicketTable({ tickets, showRank, showScore, emptyMessage
 
   if (!tickets.length) {
     return (
-      <div className="card text-center py-12 text-gray-500">
-        {emptyMessage || 'No tickets found'}
+      <div className="card text-center py-16">
+        <Inbox size={32} className="mx-auto text-gray-600 mb-3" />
+        <p className="text-gray-500 text-sm">{emptyMessage || 'No tickets found'}</p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-zinc-800">
+    <div className="overflow-x-auto rounded-xl border border-white/[0.08] shadow-lg shadow-black/20">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-zinc-900/80 border-b border-zinc-800">
-            {showRank && <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500">#</th>}
+          <tr className="bg-[#111113] border-b border-white/[0.08]">
+            {showRank && <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">#</th>}
             {defaultColumns.map(col => (
               <th
                 key={col.key}
                 onClick={() => col.sortable && handleSort(col.key)}
                 className={clsx(
-                  'px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap',
-                  col.sortable && 'cursor-pointer hover:text-gray-300 select-none'
+                  'px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap',
+                  col.sortable && 'cursor-pointer hover:text-gray-300 select-none transition-colors'
                 )}
               >
-                {col.label}
-                {sortKey === col.key && (
-                  <span className="ml-1 text-brand-primary-light">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                )}
+                <span className="inline-flex items-center gap-1">
+                  {col.label}
+                  {sortKey === col.key && (
+                    sortDir === 'asc'
+                      ? <ChevronUp size={12} className="text-brand-primary" />
+                      : <ChevronDown size={12} className="text-brand-primary" />
+                  )}
+                </span>
               </th>
             ))}
-            {showScore && <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Score</th>}
+            {showScore && <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Score</th>}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-800/50">
+        <tbody className="divide-y divide-white/[0.04]">
           {sorted.map((ticket, i) => (
             <tr
               key={ticket.id}
-              className="hover:bg-zinc-800/30 transition-colors"
+              className="hover:bg-white/[0.03] transition-colors"
             >
               {showRank && (
-                <td className="px-3 py-2.5 text-xs text-gray-500 font-mono">
+                <td className="px-4 py-3 text-xs text-gray-500 font-mono">
                   {ticket.rank ?? i + 1}
                 </td>
               )}
               {defaultColumns.map(col => (
-                <td key={col.key} className="px-3 py-2.5 max-w-[250px] truncate">
+                <td key={col.key} className="px-4 py-3 max-w-[250px] truncate">
                   {col.render ? col.render(ticket) : (ticket as any)[col.key]}
                 </td>
               ))}
               {showScore && (
-                <td className="px-3 py-2.5 text-xs text-gray-500 font-mono tabular-nums">
+                <td className="px-4 py-3 text-xs text-gray-500 font-mono tabular-nums">
                   {ticket.score?.toFixed(0)}
                 </td>
               )}

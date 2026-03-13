@@ -27,7 +27,7 @@ export default function ManageToZero() {
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <div>
+      <div className="page-header">
         <h2 className="text-xl font-bold">Manage to Zero</h2>
         <p className="text-sm text-gray-500 mt-1">Drive all numbers to zero by end of day.</p>
       </div>
@@ -42,10 +42,10 @@ export default function ManageToZero() {
               key={card.key}
               onClick={() => setActiveCard(isActive ? null : card.key)}
               className={clsx(
-                'rounded-lg p-4 text-left transition-all',
+                'group rounded-xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg shadow-black/25',
                 isActive
                   ? 'ring-2 ring-brand-primary border border-brand-primary/40 bg-brand-primary/5'
-                  : 'border border-zinc-800 bg-zinc-900 hover:border-zinc-700'
+                  : 'border border-white/[0.08] bg-[#111113] hover:border-white/[0.15]'
               )}
             >
               <p className={clsx('text-3xl font-bold tabular-nums', zeroTargetTextColor(count))}>

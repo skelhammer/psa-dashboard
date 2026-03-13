@@ -9,6 +9,7 @@ import TechnicianDetail from './pages/TechnicianDetail'
 import BillingAudit from './pages/BillingAudit'
 import ClientHealth from './pages/ClientHealth'
 import ClientDetail from './pages/ClientDetail'
+import ExecutiveReport from './pages/ExecutiveReport'
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/billing" element={<BillingAudit />} />
           <Route path="/clients" element={<ClientHealth />} />
           <Route path="/clients/:clientId" element={<ClientDetail />} />
+          <Route path="/executive" element={<ExecutiveReport />} />
         </Route>
       </Routes>
     </FilterProvider>

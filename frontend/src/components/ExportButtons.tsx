@@ -31,10 +31,10 @@ export default function ExportButtons({
 
   const showCSV = onCSV || csvData
   const btnClass =
-    'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-white/[0.04] border border-white/[0.08] rounded-lg hover:bg-white/[0.08] hover:text-gray-200 hover:border-white/[0.12] transition-all duration-150 export-btn'
+    'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-white/[0.05] border border-white/[0.1] rounded-lg hover:bg-white/[0.08] hover:text-gray-200 hover:border-white/[0.15] transition-all duration-150 export-btn'
 
   return (
-    <div className="flex items-center gap-1.5 export-btn">
+    <div className="flex items-center gap-2 export-btn">
       {showCSV && (
         <button onClick={handleCSV} className={btnClass} title="Export data as CSV">
           <Download className="w-3.5 h-3.5" />

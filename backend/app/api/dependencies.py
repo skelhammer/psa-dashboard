@@ -38,16 +38,22 @@ class FilterParams:
         self.date_range_key = date_range
 
         tz = _get_tz()
-        now = datetime.now(tz)
+        now = datetime.now(tz).replace(tzinfo=None)
 
-        if date_range == "custom" and date_from and date_to:
-            self.date_from = datetime.fromisoformat(date_from).replace(tzinfo=tz)
-            self.date_to = datetime.fromisoformat(date_to).replace(
-                hour=23, minute=59, second=59, tzinfo=tz
-            )
-        elif date_from and date_to:
-            self.date_from = datetime.fromisoformat(date_from)
-            self.date_to = datetime.fromisoformat(date_to)
+        if date_range == "custom" or (date_from and date_to):
+            # Custom range: use provided dates, fill missing with sensible defaults
+            if date_from:
+                self.date_from = datetime.fromisoformat(date_from).replace(
+                    hour=0, minute=0, second=0, microsecond=0, tzinfo=None
+                )
+            else:
+                self.date_from = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            if date_to:
+                self.date_to = datetime.fromisoformat(date_to).replace(
+                    hour=23, minute=59, second=59, microsecond=0, tzinfo=None
+                )
+            else:
+                self.date_to = now.replace(hour=23, minute=59, second=59, microsecond=0)
         else:
             self.date_from, self.date_to = self._resolve_date_range(date_range, now)
 
@@ -59,31 +65,32 @@ class FilterParams:
     @staticmethod
     def _resolve_date_range(preset: str, now: datetime) -> tuple[datetime, datetime]:
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
 
         match preset:
             case "today":
-                return today_start, now
+                return today_start, today_end
             case "this_week":
                 weekday = now.weekday()
                 week_start = today_start - timedelta(days=weekday)
-                return week_start, now
+                return week_start, today_end
             case "this_month":
                 month_start = today_start.replace(day=1)
-                return month_start, now
+                return month_start, today_end
             case "this_quarter":
                 quarter_month = ((now.month - 1) // 3) * 3 + 1
                 quarter_start = today_start.replace(month=quarter_month, day=1)
-                return quarter_start, now
+                return quarter_start, today_end
             case "this_year":
                 year_start = today_start.replace(month=1, day=1)
-                return year_start, now
+                return year_start, today_end
             case "last_30":
-                return today_start - timedelta(days=30), now
+                return today_start - timedelta(days=30), today_end
             case "last_90":
-                return today_start - timedelta(days=90), now
+                return today_start - timedelta(days=90), today_end
             case _:
                 month_start = today_start.replace(day=1)
-                return month_start, now
+                return month_start, today_end
 
 
 def _fmt_date(dt: datetime) -> str:

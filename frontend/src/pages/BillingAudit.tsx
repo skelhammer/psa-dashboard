@@ -52,7 +52,7 @@ export default function BillingAudit() {
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <div className="flex items-center justify-between">
+      <div className="page-header flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Billing Audit</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -134,10 +134,10 @@ export default function BillingAudit() {
       {isLoading ? (
         <div className="text-gray-500">Loading...</div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-800">
+        <div className="overflow-x-auto rounded-xl border border-white/[0.08] shadow-lg shadow-black/20">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-zinc-900/80 border-b border-zinc-800">
+              <tr className="bg-[#111113] border-b border-white/[0.08]">
                 {['Flag', 'Ticket', 'Subject', 'Client', 'Tech', 'Priority', 'Time', 'Reason', 'Action'].map(h => (
                   <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                 ))}
@@ -252,10 +252,10 @@ export default function BillingAudit() {
               pageTitle="Billable Clients"
             />
           </div>
-          <div className="overflow-x-auto rounded-lg border border-zinc-800">
+          <div className="overflow-x-auto rounded-xl border border-white/[0.08] shadow-lg shadow-black/20">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-zinc-900/80 border-b border-zinc-800">
+                <tr className="bg-[#111113] border-b border-white/[0.08]">
                   {['Client', 'Type', 'Source', 'Tickets', 'With Time', 'Missing', 'Missing %', 'Hours', 'Flags'].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}

@@ -21,20 +21,33 @@
 
 @layer components {
   .card {
-    @apply bg-[#111113]/80 backdrop-blur-sm border border-white/[0.06] rounded-xl p-4 shadow-lg shadow-black/20;
+    @apply bg-[#111113] border border-white/[0.08] rounded-xl p-5 shadow-lg shadow-black/25;
+    background-image: linear-gradient(135deg, rgba(255,255,255,0.012) 0%, transparent 50%);
   }
   .card-hover {
-    @apply card hover:shadow-xl transition-all duration-200 cursor-pointer;
+    @apply card cursor-pointer transition-all duration-200;
   }
   .card-hover:hover {
     border-color: rgba(59, 130, 246, 0.3);
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.05);
+    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.08), 0 0 0 1px rgba(59, 130, 246, 0.1);
+    transform: translateY(-1px);
   }
   select option {
     @apply bg-zinc-900 text-gray-200;
   }
   .glass {
-    @apply bg-white/[0.03] backdrop-blur-md border border-white/[0.06] rounded-xl;
+    @apply bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-xl;
+  }
+
+  /* Section headers */
+  .page-header {
+    @apply pb-4 mb-2 border-b border-white/[0.06];
+  }
+  .page-header h2 {
+    @apply text-xl font-bold tracking-tight text-white;
+  }
+  .page-header p {
+    @apply text-sm text-gray-500 mt-1;
   }
 }
 
@@ -47,7 +60,7 @@
   animation: pulse-red 1.5s ease-in-out infinite;
 }
 
-/* KEEP ALL PRINT STYLES BELOW THIS LINE - copy them exactly from the original file */
+/* KEEP ALL PRINT STYLES BELOW THIS LINE */
 @media print {
   body {
     background: white !important;
@@ -56,34 +69,28 @@
     print-color-adjust: exact;
   }
 
-  /* Hide sidebar */
   aside {
     display: none !important;
   }
 
-  /* Hide header */
   header {
     display: none !important;
   }
 
-  /* Hide global filters */
   .flex.items-center.gap-3.flex-wrap:has(select) {
     display: none !important;
   }
 
-  /* Hide export buttons */
   .export-btn {
     display: none !important;
   }
 
-  /* Hide interactive elements */
   input[type="checkbox"],
   select,
   button {
     display: none !important;
   }
 
-  /* Make main content fill the page */
   .flex.h-screen {
     display: block !important;
   }
@@ -93,20 +100,17 @@
     padding: 0 !important;
   }
 
-  /* Charts fit on page */
   .recharts-responsive-container {
     max-width: 100% !important;
     page-break-inside: avoid;
   }
 
-  /* Cards */
   .card {
     background: white !important;
     border-color: #d1d5db !important;
     page-break-inside: avoid;
   }
 
-  /* Page breaks between major sections */
   .grid {
     page-break-inside: avoid;
   }
@@ -115,7 +119,6 @@
     page-break-before: auto;
   }
 
-  /* Table styling for print */
   table {
     border-collapse: collapse !important;
   }

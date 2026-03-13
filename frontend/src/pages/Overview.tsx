@@ -10,8 +10,8 @@ import ExportButtons from '../components/ExportButtons'
 import { exportMultiSectionCSV } from '../utils/export'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend,
-  ComposedChart, Area, ReferenceLine,
+  LineChart, Line, CartesianGrid, PieChart, Pie, Cell,
+  ReferenceLine,
 } from 'recharts'
 
 const tooltipStyle = {
@@ -45,10 +45,11 @@ export default function Overview() {
         data: [{
           'Open Tickets': kpis.total_open,
           'Created Today': kpis.created_today,
+          'Closed Today': kpis.closed_today,
           'Created This Week': kpis.created_this_week,
+          'Closed This Week': kpis.closed_this_week,
           'Created (Period)': kpis.created_period,
-          'Opened (Week)': kpis.open_vs_closed_ratio?.opened,
-          'Closed (Week)': kpis.open_vs_closed_ratio?.closed,
+          'Closed (Period)': kpis.closed_period,
           'Avg First Response': kpis.avg_first_response_minutes ? formatDuration(kpis.avg_first_response_minutes) : '-',
           'Avg Resolution': kpis.avg_resolution_minutes ? formatDuration(kpis.avg_resolution_minutes) : '-',
           'SLA Compliance %': kpis.sla_compliance_pct,
@@ -58,22 +59,20 @@ export default function Overview() {
         }],
       })
     }
-    if (charts?.volume_trend?.length) sections.push({ name: 'Volume Trend (30 Days)', data: charts.volume_trend })
-    if (charts?.backlog_trend?.length) sections.push({ name: 'Backlog Trend (12 Weeks)', data: charts.backlog_trend })
+    if (charts?.volume_trend?.length) sections.push({ name: 'Volume Trend', data: charts.volume_trend })
     if (charts?.aging_buckets?.length) sections.push({ name: 'Ticket Aging', data: charts.aging_buckets })
     if (charts?.workload_balance?.length) sections.push({ name: 'Workload Balance', data: charts.workload_balance })
     if (charts?.group_distribution?.length) sections.push({ name: 'Open Tickets by Group', data: charts.group_distribution })
     if (charts?.status_distribution?.length) sections.push({ name: 'Tickets by Status', data: charts.status_distribution })
     if (charts?.priority_distribution?.length) sections.push({ name: 'Tickets by Priority', data: charts.priority_distribution })
     if (charts?.sla_trend?.length) sections.push({ name: 'SLA Compliance Trend', data: charts.sla_trend })
-    if (charts?.category_distribution?.length) sections.push({ name: 'Top Categories', data: charts.category_distribution })
 
     exportMultiSectionCSV(sections, 'overview_report')
   }
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between page-header">
         <div>
           <h2 className="text-xl font-bold">Overview</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -88,21 +87,38 @@ export default function Overview() {
 
       <GlobalFilters />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      {/* KPI Cards - Row 1: Current snapshot */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Open Tickets" value={kpis?.total_open ?? '-'} onClick={() => navigate('/manage-to-zero')} />
-        <KpiCard label="Created Today" value={kpis?.created_today ?? '-'} onClick={() => navigate('/work-queue')} />
-        <KpiCard label="Created This Week" value={kpis?.created_this_week ?? '-'} onClick={() => navigate('/work-queue')} />
-        <KpiCard label="Created (Period)" value={kpis?.created_period ?? '-'} subtitle={periodLabel} pctChange={pct?.created_period} changeDirection="up-good" />
         <KpiCard
-          label="Open vs Closed (Week)"
-          value={`${kpis?.open_vs_closed_ratio?.opened ?? 0} / ${kpis?.open_vs_closed_ratio?.closed ?? 0}`}
+          label="Created / Closed Today"
+          value={`${kpis?.created_today ?? 0} / ${kpis?.closed_today ?? 0}`}
           colorClass={
-            kpis?.open_vs_closed_ratio?.closed >= kpis?.open_vs_closed_ratio?.opened
+            (kpis?.closed_today ?? 0) >= (kpis?.created_today ?? 0)
+              ? 'border-green-500/30' : 'border-red-500/30'
+          }
+          onClick={() => navigate('/work-queue')}
+        />
+        <KpiCard
+          label="Created / Closed This Week"
+          value={`${kpis?.created_this_week ?? 0} / ${kpis?.closed_this_week ?? 0}`}
+          colorClass={
+            (kpis?.closed_this_week ?? 0) >= (kpis?.created_this_week ?? 0)
               ? 'border-green-500/30' : 'border-red-500/30'
           }
           onClick={() => navigate('/manage-to-zero')}
         />
+        <KpiCard
+          label="Billing Flags"
+          value={kpis?.unresolved_billing_flags ?? 0}
+          colorClass={kpis?.unresolved_billing_flags > 0 ? 'border-red-500/30' : ''}
+          onClick={() => navigate('/billing')}
+        />
+      </div>
+
+      {/* KPI Cards - Row 2: Period metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Created (Period)" value={kpis?.created_period ?? '-'} subtitle={periodLabel} pctChange={pct?.created_period} changeDirection="up-good" />
         <KpiCard
           label="Closed (Period)"
           value={kpis?.closed_period ?? '-'}
@@ -147,12 +163,6 @@ export default function Overview() {
           onClick={() => navigate('/technicians')}
         />
         <KpiCard
-          label="Billing Flags"
-          value={kpis?.unresolved_billing_flags ?? 0}
-          colorClass={kpis?.unresolved_billing_flags > 0 ? 'border-red-500/30' : ''}
-          onClick={() => navigate('/billing')}
-        />
-        <KpiCard
           label="Reopened"
           value={kpis?.reopened_period ?? 0}
           subtitle={periodLabel}
@@ -164,7 +174,7 @@ export default function Overview() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Volume Trend */}
-        <ChartCard title="Ticket Volume (Last 30 Days)" exportData={charts?.volume_trend} exportFilename="volume_trend">
+        <ChartCard title="Ticket Volume" exportData={charts?.volume_trend} exportFilename="volume_trend">
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={charts?.volume_trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -173,21 +183,6 @@ export default function Overview() {
               <Tooltip {...tooltipStyle} />
               <Bar dataKey="count" fill={BRAND.primary} radius={[2, 2, 0, 0]} />
             </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Backlog Trend */}
-        <ChartCard title="Backlog Trend (12 Weeks)" exportData={charts?.backlog_trend} exportFilename="backlog_trend">
-          <ResponsiveContainer width="100%" height={250}>
-            <ComposedChart data={charts?.backlog_trend || []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <Tooltip {...tooltipStyle} />
-              <Bar dataKey="opened" fill="#60A5FA" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="closed" fill="#34D399" radius={[2, 2, 0, 0]} />
-              <Line type="monotone" dataKey="open_count" stroke="#F87171" strokeWidth={2} dot={false} name="Open" />
-            </ComposedChart>
           </ResponsiveContainer>
         </ChartCard>
 
@@ -295,11 +290,11 @@ export default function Overview() {
         </ChartCard>
 
         {/* SLA Compliance Trend */}
-        <ChartCard title="SLA Compliance Trend (12 Weeks)" exportData={charts?.sla_trend} exportFilename="sla_trend">
+        <ChartCard title="SLA Compliance Trend" exportData={charts?.sla_trend} exportFilename="sla_trend">
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={charts?.sla_trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#6b7280' }} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} />
               <YAxis domain={['dataMin - 5', 100]} tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={(v: number) => `${v}%`} />
               <Tooltip {...tooltipStyle} />
               <ReferenceLine y={95} stroke="#34D399" strokeDasharray="3 3" label={{ value: "95% Target", fill: "#34D399", fontSize: 10 }} />
@@ -308,18 +303,6 @@ export default function Overview() {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Top Categories */}
-        <ChartCard title="Top Categories (Period)" exportData={charts?.category_distribution} exportFilename="category_distribution">
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={charts?.category_distribution || []} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis dataKey="category" type="category" tick={{ fontSize: 11, fill: '#9ca3af' }} width={120} />
-              <Tooltip {...tooltipStyle} />
-              <Bar dataKey="count" fill={BRAND.primary} radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
       </div>
     </div>
   )

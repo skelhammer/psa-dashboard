@@ -18,46 +18,61 @@ logger = logging.getLogger(__name__)
 
 async def run_post_sync_hooks(conn: aiosqlite.Connection, provider: PSAProvider):
     """Run all post-sync hooks."""
+    await backfill_resolution_time(conn)
     await sync_billing_config(conn)
     await generate_billing_flags(conn)
     await sync_conversations_for_open_tickets(conn, provider)
 
 
+async def backfill_resolution_time(conn: aiosqlite.Connection):
+    """Backfill resolution_time from updated_time for closed tickets missing it.
+
+    Old imported tickets often lack resolution_time. Using updated_time as a
+    fallback keeps closed-ticket queries accurate without COALESCE everywhere.
+    """
+    result = await conn.execute(
+        """UPDATE tickets SET resolution_time = updated_time
+           WHERE status IN ('Resolved', 'Closed')
+             AND resolution_time IS NULL
+             AND updated_time IS NOT NULL"""
+    )
+    if result.rowcount:
+        logger.info("Backfilled resolution_time for %d closed tickets", result.rowcount)
+
+
 async def sync_billing_config(conn: aiosqlite.Connection):
-    """Auto-create/update billing_config for clients that should be billed hourly.
+    """Auto-create/update billing_config for clients based on contract whitelist.
 
-    Detection methods (in priority order):
-    1. Client plan tag matches a configured hourly plan name (from config.yaml billing.hourly_plans)
-    2. Client has an active hourly or block_hour contract
+    Whitelist approach: clients with an active contract matching unlimited_plans
+    are excluded from billing. All other active clients are treated as hourly.
 
-    Clients on unlimited_plans are always excluded from billing tracking.
     Only updates entries where auto_detected = true (never overwrites manual overrides).
     """
     from app.config import get_settings
     settings = get_settings()
-    hourly_plans = settings.billing.hourly_plans
     unlimited_plans = settings.billing.unlimited_plans
     now = datetime.now().isoformat()
 
-    # Build set of client IDs that should never be billed
+    # Build set of client IDs on unlimited plans (whitelist)
     excluded_ids: set[str] = set()
     if unlimited_plans:
         placeholders = ",".join("?" for _ in unlimited_plans)
         excluded_rows = await conn.execute_fetchall(
-            f"SELECT id FROM clients WHERE plan IN ({placeholders})",
+            f"""SELECT DISTINCT client_id FROM client_contracts
+                WHERE status = 'active' AND contract_name IN ({placeholders})""",
             unlimited_plans,
         )
         excluded_ids = {row[0] for row in excluded_rows}
-        logger.info("Billing exclusion: %d clients on unlimited plans", len(excluded_ids))
+        logger.info("Billing exclusion: %d clients with unlimited plan contracts", len(excluded_ids))
 
-    # Remove existing auto-detected billing config for excluded clients
+    # Remove auto-detected billing config for excluded clients
     if excluded_ids:
         id_placeholders = ",".join("?" for _ in excluded_ids)
         await conn.execute(
             f"DELETE FROM billing_config WHERE client_id IN ({id_placeholders}) AND auto_detected = 1",
             list(excluded_ids),
         )
-        # Also auto-resolve any open billing flags for excluded clients
+        # Auto-resolve any open billing flags for excluded clients
         await conn.execute(
             f"""UPDATE billing_flags
                 SET resolved = 1, resolved_at = ?, resolution_note = 'Auto-resolved: client on unlimited plan'
@@ -68,32 +83,12 @@ async def sync_billing_config(conn: aiosqlite.Connection):
             [now, *list(excluded_ids)],
         )
 
-    billable_clients: list[tuple[str, str]] = []  # (client_id, billing_type)
-
-    # Method 1: Plan-based detection (from client tags/plan field)
-    if hourly_plans:
-        placeholders = ",".join("?" for _ in hourly_plans)
-        plan_rows = await conn.execute_fetchall(
-            f"SELECT id, plan FROM clients WHERE plan IN ({placeholders}) AND stage = 'Active'",
-            hourly_plans,
-        )
-        for row in plan_rows:
-            if row[0] not in excluded_ids:
-                billable_clients.append((row[0], "hourly"))
-        if plan_rows:
-            logger.info("Plan-based billing: found %d clients matching hourly plans", len(billable_clients))
-
-    # Method 2: Contract-based detection (fallback)
-    contract_rows = await conn.execute_fetchall(
-        """SELECT DISTINCT client_id, contract_type
-           FROM client_contracts
-           WHERE status = 'active'
-             AND contract_type IN ('hourly', 'block_hour')"""
+    # All other active clients are billable (hourly)
+    all_active = await conn.execute_fetchall(
+        "SELECT id FROM clients WHERE stage = 'Active'"
     )
-    already_found = {c[0] for c in billable_clients}
-    for row in contract_rows:
-        if row[0] not in already_found and row[0] not in excluded_ids:
-            billable_clients.append((row[0], row[1]))
+    billable_clients = [(row[0], "hourly") for row in all_active if row[0] not in excluded_ids]
+    logger.info("Billing: %d active clients are billable, %d excluded (unlimited)", len(billable_clients), len(excluded_ids))
 
     for client_id, billing_type in billable_clients:
         # Check if manual override exists

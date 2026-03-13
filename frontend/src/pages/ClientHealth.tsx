@@ -33,7 +33,7 @@ export default function ClientHealth() {
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <div>
+      <div className="page-header">
         <h2 className="text-xl font-bold">Client Health</h2>
         <p className="text-sm text-gray-500 mt-1">
           Per-client service health scores, SLA compliance, and ticket metrics.
@@ -42,10 +42,10 @@ export default function ClientHealth() {
 
       <GlobalFilters />
 
-      <div className="overflow-x-auto rounded-lg border border-zinc-800">
+      <div className="overflow-x-auto rounded-xl border border-white/[0.08] shadow-lg shadow-black/20">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-zinc-900/80 border-b border-zinc-800">
+            <tr className="bg-[#111113] border-b border-white/[0.08]">
               {[
                 'Client Name', 'Health', 'Open', 'Closed', 'SLA %',
                 'Avg FR', 'Avg Resolution', 'Hours'

@@ -34,7 +34,7 @@ export default function ClientDetail() {
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <div className="flex items-center gap-3">
+      <div className="page-header flex items-center gap-3">
         <button
           onClick={() => navigate('/clients')}
           className="text-sm text-gray-500 hover:text-gray-300"

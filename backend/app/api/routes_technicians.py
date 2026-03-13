@@ -117,7 +117,7 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
 
         # Reopened (in period)
         reopened = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND reopened = 1 AND created_time >= ? AND created_time <= ?{extra_and}",
+            f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND reopened = 1 AND updated_time >= ? AND updated_time <= ?{extra_and}",
             [tech_id, period_start, period_end, *extra_params],
         )
 
@@ -263,7 +263,7 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
     )
 
     reopened = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND reopened = 1 AND created_time >= ? AND created_time <= ?{extra_and}",
+        f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND reopened = 1 AND updated_time >= ? AND updated_time <= ?{extra_and}",
         [tech_id, period_start, period_end, *extra_params],
     )
 

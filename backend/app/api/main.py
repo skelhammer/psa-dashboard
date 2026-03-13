@@ -75,6 +75,7 @@ def create_app() -> FastAPI:
     from app.api.routes_technicians import router as tech_router
     from app.api.routes_billing import router as billing_router
     from app.api.routes_clients import router as client_router
+    from app.api.routes_executive import router as executive_router
 
     app.include_router(sync_router)
     app.include_router(filters_router)
@@ -84,5 +85,6 @@ def create_app() -> FastAPI:
     app.include_router(tech_router)
     app.include_router(billing_router)
     app.include_router(client_router)
+    app.include_router(executive_router)
 
     return app

@@ -175,7 +175,7 @@ export default function Technicians() {
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <div className="flex items-center justify-between">
+      <div className="page-header flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Technician Performance</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -183,7 +183,7 @@ export default function Technicians() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1 border border-zinc-800">
+          <div className="flex items-center gap-1 bg-[#111113] rounded-lg p-1 border border-white/[0.08]">
             <button
               onClick={() => setViewMode('table')}
               className={clsx(
@@ -247,10 +247,10 @@ export default function Technicians() {
       )}
 
       {viewMode === 'table' ? (
-        <div className="overflow-x-auto rounded-lg border border-zinc-800">
+        <div className="overflow-x-auto rounded-xl border border-white/[0.08] shadow-lg shadow-black/20">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-zinc-900/80 border-b border-zinc-800">
+              <tr className="bg-[#111113] border-b border-white/[0.08]">
                 {columns.map(col => (
                   <th
                     key={col.key}

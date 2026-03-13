@@ -44,6 +44,46 @@ def _build_filter_sql(filters: FilterParams, prefix: str = "") -> tuple[str, lis
     return " AND ".join(conditions), params
 
 
+def _auto_intervals(start: datetime, end: datetime) -> list[tuple[datetime, datetime, str]]:
+    """Generate time intervals with auto granularity based on period length.
+
+    < 14 days: daily
+    14-90 days: weekly
+    > 90 days: monthly
+    """
+    days = (end - start).days
+    intervals = []
+
+    if days <= 14:
+        # Daily
+        d = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        while d < end:
+            next_d = d + timedelta(days=1)
+            intervals.append((d, min(next_d, end), d.strftime("%b %d")))
+            d = next_d
+    elif days <= 90:
+        # Weekly
+        d = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Align to Monday
+        d = d - timedelta(days=d.weekday())
+        while d < end:
+            next_d = d + timedelta(weeks=1)
+            intervals.append((d, min(next_d, end), d.strftime("%b %d")))
+            d = next_d
+    else:
+        # Monthly
+        d = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        while d < end:
+            if d.month == 12:
+                next_d = d.replace(year=d.year + 1, month=1)
+            else:
+                next_d = d.replace(month=d.month + 1)
+            intervals.append((d, min(next_d, end), d.strftime("%b %Y")))
+            d = next_d
+
+    return intervals
+
+
 @router.get("/overview")
 async def overview(request: Request, filters: FilterParams = Depends()):
     db = request.app.state.db
@@ -55,6 +95,7 @@ async def overview(request: Request, filters: FilterParams = Depends()):
 
     # Use the filter's resolved date range for period-based metrics
     period_start = filters.date_from.isoformat()
+    period_end = filters.date_to.isoformat()
 
     # Extra filter conditions (client, tech, priority, category)
     extra_sql, extra_params = _build_filter_sql(filters)
@@ -68,13 +109,19 @@ async def overview(request: Request, filters: FilterParams = Depends()):
 
     # Tickets created in selected period
     created_period = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE created_time >= ?{extra_and}",
-        [period_start, *extra_params],
+        f"SELECT COUNT(*) FROM tickets WHERE created_time >= ? AND created_time <= ?{extra_and}",
+        [period_start, period_end, *extra_params],
     )
 
     # Tickets created today
     created_today = await conn.execute_fetchall(
         f"SELECT COUNT(*) FROM tickets WHERE created_time >= ?{extra_and}",
+        [today_start.isoformat(), *extra_params],
+    )
+
+    # Tickets closed today
+    closed_today = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM tickets WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ?{extra_and}",
         [today_start.isoformat(), *extra_params],
     )
 
@@ -86,8 +133,8 @@ async def overview(request: Request, filters: FilterParams = Depends()):
 
     # Closed in selected period
     closed_period = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ?{extra_and}",
-        [period_start, *extra_params],
+        f"SELECT COUNT(*) FROM tickets WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time <= ?{extra_and}",
+        [period_start, period_end, *extra_params],
     )
 
     # Closed this week
@@ -99,28 +146,28 @@ async def overview(request: Request, filters: FilterParams = Depends()):
     # Average first response time (selected period, in business minutes)
     avg_fr = await conn.execute_fetchall(
         f"""SELECT AVG(first_response_business_minutes) FROM tickets
-        WHERE first_response_business_minutes > 0 AND created_time >= ?{extra_and}""",
-        [period_start, *extra_params],
+        WHERE first_response_business_minutes > 0 AND created_time >= ? AND created_time <= ?{extra_and}""",
+        [period_start, period_end, *extra_params],
     )
 
     # Average resolution time (selected period, in business minutes)
     avg_res = await conn.execute_fetchall(
         f"""SELECT AVG(resolution_business_minutes) FROM tickets
-        WHERE resolution_business_minutes > 0 AND created_time >= ?{extra_and}""",
-        [period_start, *extra_params],
+        WHERE resolution_business_minutes > 0 AND created_time >= ? AND created_time <= ?{extra_and}""",
+        [period_start, period_end, *extra_params],
     )
 
     # SLA compliance rate (selected period)
     total_with_sla = await conn.execute_fetchall(
         f"""SELECT COUNT(*) FROM tickets
-           WHERE created_time >= ? AND sla_name IS NOT NULL{extra_and}""",
-        [period_start, *extra_params],
+           WHERE created_time >= ? AND created_time <= ? AND sla_name IS NOT NULL{extra_and}""",
+        [period_start, period_end, *extra_params],
     )
     violated_sla = await conn.execute_fetchall(
         f"""SELECT COUNT(*) FROM tickets
-           WHERE created_time >= ? AND sla_name IS NOT NULL
+           WHERE created_time >= ? AND created_time <= ? AND sla_name IS NOT NULL
            AND (first_response_violated = 1 OR resolution_violated = 1){extra_and}""",
-        [period_start, *extra_params],
+        [period_start, period_end, *extra_params],
     )
 
     total_sla = total_with_sla[0][0] or 0
@@ -129,8 +176,8 @@ async def overview(request: Request, filters: FilterParams = Depends()):
 
     # Total worklog hours (selected period)
     worklog = await conn.execute_fetchall(
-        f"SELECT SUM(worklog_minutes) FROM tickets WHERE created_time >= ?{extra_and}",
-        [period_start, *extra_params],
+        f"SELECT SUM(worklog_minutes) FROM tickets WHERE created_time >= ? AND created_time <= ?{extra_and}",
+        [period_start, period_end, *extra_params],
     )
     total_worklog_hours = round((worklog[0][0] or 0) / 60, 1)
 
@@ -147,10 +194,10 @@ async def overview(request: Request, filters: FilterParams = Depends()):
             "SELECT COUNT(*) FROM billing_flags WHERE resolved = 0"
         )
 
-    # Reopened tickets in selected period
+    # Reopened tickets in selected period (by updated_time, since that's when they were reopened)
     reopened = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE reopened = 1 AND created_time >= ?{extra_and}",
-        [period_start, *extra_params],
+        f"SELECT COUNT(*) FROM tickets WHERE reopened = 1 AND updated_time >= ? AND updated_time <= ?{extra_and}",
+        [period_start, period_end, *extra_params],
     )
 
     # --- Period-over-period comparison ---
@@ -200,7 +247,7 @@ async def overview(request: Request, filters: FilterParams = Depends()):
     prev_worklog_hours = round((prev_worklog[0][0] or 0) / 60, 1)
 
     prev_reopened = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE reopened = 1 AND created_time >= ? AND created_time < ?{extra_and}",
+        f"SELECT COUNT(*) FROM tickets WHERE reopened = 1 AND updated_time >= ? AND updated_time < ?{extra_and}",
         [prev_start_iso, prev_end_iso, *extra_params],
     )
 
@@ -219,6 +266,7 @@ async def overview(request: Request, filters: FilterParams = Depends()):
         "kpis": {
             "total_open": open_count[0][0],
             "created_today": created_today[0][0],
+            "closed_today": closed_today[0][0],
             "created_this_week": created_week[0][0],
             "created_period": created_p,
             "closed_period": closed_p,
@@ -249,59 +297,29 @@ async def overview(request: Request, filters: FilterParams = Depends()):
 
 @router.get("/overview/charts")
 async def overview_charts(request: Request, filters: FilterParams = Depends()):
-    """Chart data: volume trend, backlog trend, aging buckets, workload balance."""
+    """Chart data: volume trend, aging buckets, workload balance, SLA trend."""
     db = request.app.state.db
     conn = await db.get_connection()
     now = _now_tz()
 
+    start = filters.date_from
+    end = filters.date_to
+    period_start = start.isoformat()
+
     extra_sql, extra_params = _build_filter_sql(filters)
     extra_and = f" AND {extra_sql}" if extra_sql else ""
 
-    # Volume trend: tickets created per day, last 30 days
-    thirty_days_ago = (now - timedelta(days=30)).isoformat()
-    volume = await conn.execute_fetchall(
-        f"""SELECT DATE(created_time) as day, COUNT(*) as count
-           FROM tickets WHERE created_time >= ?{extra_and}
-           GROUP BY DATE(created_time) ORDER BY day""",
-        [thirty_days_ago, *extra_params],
-    )
-    volume_trend = [{"date": r["day"], "count": r["count"]} for r in volume]
+    # Auto-granularity intervals for the selected date range
+    intervals = _auto_intervals(start, end)
 
-    # Backlog trend: opened, closed, and open snapshot per week (last 12 weeks)
-    backlog_trend = []
-    for i in range(12, -1, -1):
-        week_end = now - timedelta(weeks=i)
-        week_start = week_end - timedelta(weeks=1)
-        we_iso = week_end.isoformat()
-        ws_iso = week_start.isoformat()
-        week_label = week_end.strftime("%Y-W%W")
-
-        opened_row = await conn.execute_fetchall(
+    # Volume trend: tickets created per interval
+    volume_trend = []
+    for iv_start, iv_end, label in intervals:
+        row = await conn.execute_fetchall(
             f"SELECT COUNT(*) FROM tickets WHERE created_time >= ? AND created_time < ?{extra_and}",
-            [ws_iso, we_iso, *extra_params],
+            [iv_start.isoformat(), iv_end.isoformat(), *extra_params],
         )
-        closed_row = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE resolution_time >= ? AND resolution_time < ?{extra_and}",
-            [ws_iso, we_iso, *extra_params],
-        )
-        # Snapshot: tickets open at week_end
-        # A ticket is open if: created before week_end AND (not resolved/closed, OR resolved after week_end)
-        # Tickets with NULL resolution_time but status Resolved/Closed are old imports, exclude them
-        open_row = await conn.execute_fetchall(
-            f"""SELECT COUNT(*) FROM tickets
-                WHERE created_time < ?
-                AND (
-                    (resolution_time IS NOT NULL AND resolution_time >= ?)
-                    OR (resolution_time IS NULL AND status NOT IN {CLOSED_STATUSES_SQL})
-                ){extra_and}""",
-            [we_iso, we_iso, *extra_params],
-        )
-        backlog_trend.append({
-            "week": week_label,
-            "opened": opened_row[0][0],
-            "closed": closed_row[0][0],
-            "open_count": open_row[0][0],
-        })
+        volume_trend.append({"date": label, "count": row[0][0] or 0})
 
     # Aging buckets: open tickets by age
     aging_buckets = {"0-1d": 0, "1-3d": 0, "3-7d": 0, "7-14d": 0, "14d+": 0}
@@ -362,53 +380,36 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     )
     group_chart = [{"group": r["group_name"], "count": r["count"]} for r in group_dist]
 
-    # SLA compliance trend (last 12 weeks)
+    # SLA compliance trend (auto-granularity)
     sla_trend = []
-    for i in range(12, -1, -1):
-        week_end = now - timedelta(weeks=i)
-        week_start = week_end - timedelta(weeks=1)
-        we_iso_sla = week_end.isoformat()
-        ws_iso_sla = week_start.isoformat()
-
-        total_sla_week = await conn.execute_fetchall(
+    for iv_start, iv_end, label in intervals:
+        total_sla_iv = await conn.execute_fetchall(
             f"""SELECT COUNT(*) FROM tickets
                WHERE created_time >= ? AND created_time < ? AND sla_name IS NOT NULL{extra_and}""",
-            [ws_iso_sla, we_iso_sla, *extra_params],
+            [iv_start.isoformat(), iv_end.isoformat(), *extra_params],
         )
-        violated_sla_week = await conn.execute_fetchall(
+        violated_sla_iv = await conn.execute_fetchall(
             f"""SELECT COUNT(*) FROM tickets
                WHERE created_time >= ? AND created_time < ? AND sla_name IS NOT NULL
                AND (first_response_violated = 1 OR resolution_violated = 1){extra_and}""",
-            [ws_iso_sla, we_iso_sla, *extra_params],
+            [iv_start.isoformat(), iv_end.isoformat(), *extra_params],
         )
-        total_count = total_sla_week[0][0] or 0
-        violated_count = violated_sla_week[0][0] or 0
+        total_count = total_sla_iv[0][0] or 0
+        violated_count = violated_sla_iv[0][0] or 0
         compliance = round(((total_count - violated_count) / total_count * 100) if total_count > 0 else 100, 1)
         sla_trend.append({
-            "week": week_end.strftime("%Y-W%W"),
+            "label": label,
             "compliance_pct": compliance,
             "total": total_count,
             "violated": violated_count,
         })
 
-    # Category distribution (tickets created in period)
-    period_start = filters.date_from.isoformat()
-    category_dist = await conn.execute_fetchall(
-        f"""SELECT COALESCE(category, 'Uncategorized') as category, COUNT(*) as count
-            FROM tickets WHERE created_time >= ?{extra_and}
-            GROUP BY category ORDER BY count DESC LIMIT 10""",
-        [period_start, *extra_params],
-    )
-    category_chart = [{"category": r["category"], "count": r["count"]} for r in category_dist]
-
     return {
         "volume_trend": volume_trend,
-        "backlog_trend": backlog_trend,
         "aging_buckets": [{"bucket": k, "count": v} for k, v in aging_buckets.items()],
         "status_distribution": status_chart,
         "priority_distribution": priority_chart,
         "workload_balance": workload_chart,
         "group_distribution": group_chart,
         "sla_trend": sla_trend,
-        "category_distribution": category_chart,
     }

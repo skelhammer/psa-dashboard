@@ -136,6 +136,21 @@ export function useBillingSummary(params?: Record<string, string>) {
   })
 }
 
+// Executive Report
+export function useExecutiveReport(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['executive-report', params],
+    queryFn: () => api.get('/executive/report', { params }).then(r => r.data),
+  })
+}
+
+export function useExecutiveCharts(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['executive-charts', params],
+    queryFn: () => api.get('/executive/charts', { params }).then(r => r.data),
+  })
+}
+
 export function useResolveFlag() {
   const qc = useQueryClient()
   return useMutation({
