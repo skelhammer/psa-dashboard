@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.api.queries import OPEN_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
 
 router = APIRouter(prefix="/api", tags=["manage-to-zero"])
 
@@ -35,29 +35,29 @@ async def manage_to_zero(request: Request):
 
     # Unassigned tickets
     unassigned = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status IN {OPEN_STATUSES_SQL} AND (technician_id IS NULL OR technician_id = '')"
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND (technician_id IS NULL OR technician_id = '')"
     )
 
     # No first response
     no_response = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status IN {OPEN_STATUSES_SQL} AND first_response_time IS NULL"
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND first_response_time IS NULL"
     )
 
     # Awaiting tech reply (customer replied, tech hasn't)
     awaiting_tech = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status IN {OPEN_STATUSES_SQL} AND last_responder_type = 'requester'"
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND last_responder_type = 'requester'"
     )
 
     # Stale tickets (no update in X days)
     stale = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status IN {OPEN_STATUSES_SQL} AND updated_time < ?",
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND updated_time < ?",
         (stale_cutoff,),
     )
 
     # SLA breaching soon (within warning window, not yet violated)
     sla_breaching = await conn.execute_fetchall(
         f"""SELECT COUNT(*) FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND (
                 (first_response_due IS NOT NULL AND first_response_due <= ? AND first_response_due > ? AND (first_response_violated IS NULL OR first_response_violated = 0))
                 OR
@@ -69,7 +69,7 @@ async def manage_to_zero(request: Request):
     # SLA already violated (still open)
     sla_violated = await conn.execute_fetchall(
         f"""SELECT COUNT(*) FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND (first_response_violated = 1 OR resolution_violated = 1)"""
     )
 
@@ -132,35 +132,35 @@ async def mtz_drilldown(
     query_map = {
         "unassigned": f"""
             SELECT * FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND (technician_id IS NULL OR technician_id = '')
             {extra}
             ORDER BY {PRIORITY_ORDER} DESC, first_response_due ASC
         """,
         "no_first_response": f"""
             SELECT * FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND first_response_time IS NULL
             {extra}
             ORDER BY {PRIORITY_ORDER} DESC, first_response_due ASC
         """,
         "awaiting_tech_reply": f"""
             SELECT * FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND last_responder_type = 'requester'
             {extra}
             ORDER BY {PRIORITY_ORDER} DESC, last_conversation_time ASC
         """,
         "stale": f"""
             SELECT * FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND updated_time < '{stale_cutoff}'
             {extra}
             ORDER BY updated_time ASC
         """,
         "sla_breaching_soon": f"""
             SELECT * FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND (
                 (first_response_due IS NOT NULL AND first_response_due <= '{sla_warn_cutoff}' AND first_response_due > '{now_iso}' AND (first_response_violated IS NULL OR first_response_violated = 0))
                 OR
@@ -171,7 +171,7 @@ async def mtz_drilldown(
         """,
         "sla_violated": f"""
             SELECT * FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND (first_response_violated = 1 OR resolution_violated = 1)
             {extra}
             ORDER BY {PRIORITY_ORDER} DESC, created_time ASC

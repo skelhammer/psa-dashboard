@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import FilterParams
-from app.api.queries import CLOSED_STATUSES_SQL, OPEN_STATUSES_SQL
+from app.api.queries import CLOSED_STATUSES_SQL
 from app.config import get_settings
 
 router = APIRouter(prefix="/api", tags=["overview"])
@@ -103,7 +103,7 @@ async def overview(request: Request, filters: FilterParams = Depends()):
 
     # Total open tickets
     open_count = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status IN {OPEN_STATUSES_SQL}{extra_and}",
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}",
         extra_params,
     )
 
@@ -324,7 +324,7 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     # Aging buckets: open tickets by age
     aging_buckets = {"0-1d": 0, "1-3d": 0, "3-7d": 0, "7-14d": 0, "14d+": 0}
     open_tickets = await conn.execute_fetchall(
-        f"SELECT created_time FROM tickets WHERE status IN {OPEN_STATUSES_SQL}{extra_and}",
+        f"SELECT created_time FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}",
         extra_params,
     )
     for row in open_tickets:
@@ -347,7 +347,7 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     # Status distribution
     status_dist = await conn.execute_fetchall(
         f"""SELECT status, COUNT(*) as count FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}{extra_and}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
             GROUP BY status ORDER BY count DESC""",
         extra_params,
     )
@@ -356,7 +356,7 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     # Priority distribution
     priority_dist = await conn.execute_fetchall(
         f"""SELECT priority, COUNT(*) as count FROM tickets
-            WHERE status IN {OPEN_STATUSES_SQL}{extra_and}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
             GROUP BY priority ORDER BY count DESC""",
         extra_params,
     )
@@ -365,7 +365,7 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     # Workload balance: open tickets per tech
     workload = await conn.execute_fetchall(
         f"""SELECT COALESCE(technician_name, 'Unassigned') as tech, COUNT(*) as count
-            FROM tickets WHERE status IN {OPEN_STATUSES_SQL}{extra_and}
+            FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
             GROUP BY technician_name ORDER BY count DESC""",
         extra_params,
     )
@@ -374,7 +374,7 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     # Tickets by tech group (open tickets); null group treated as Tier 1 Support
     group_dist = await conn.execute_fetchall(
         f"""SELECT COALESCE(tech_group_name, 'Tier 1 Support') as group_name, COUNT(*) as count
-            FROM tickets WHERE status IN {OPEN_STATUSES_SQL}{extra_and}
+            FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
             GROUP BY group_name ORDER BY count DESC""",
         extra_params,
     )

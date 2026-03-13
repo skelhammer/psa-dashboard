@@ -20,7 +20,8 @@ from app.utils.business_hours import calculate_business_minutes
 
 logger = logging.getLogger(__name__)
 
-CLOSED_STATUSES = ["Resolved", "Closed"]
+def _get_closed_statuses() -> list[str]:
+    return get_settings().server.closed_statuses
 
 
 class SyncEngine:
@@ -283,7 +284,7 @@ class SyncEngine:
             filters = TicketFilter(
                 page=page,
                 page_size=100,
-                exclude_statuses=list(CLOSED_STATUSES),
+                exclude_statuses=list(_get_closed_statuses()),
             )
             result = await self.provider.get_tickets(filters)
             for ticket in result.items:
@@ -332,7 +333,7 @@ class SyncEngine:
             old_res_time = existing[0][0]
             old_status = existing[0][1]
             # If it had a resolution_time and now status is not closed, it was reopened
-            if old_res_time and ticket.status not in CLOSED_STATUSES:
+            if old_res_time and ticket.status not in _get_closed_statuses():
                 reopened = True
             # Preserve existing reopened flag
             if not reopened:
@@ -341,6 +342,10 @@ class SyncEngine:
                 )
                 if old_reopened and old_reopened[0][0]:
                     reopened = True
+        else:
+            # Fresh insert: if ticket has a resolution_time but is not closed, it was reopened
+            if ticket.resolution_time and ticket.status not in _get_closed_statuses():
+                reopened = True
 
         await conn.execute(
             """INSERT OR REPLACE INTO tickets (

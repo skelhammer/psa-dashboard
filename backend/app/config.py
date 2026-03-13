@@ -44,6 +44,7 @@ class ServerConfig:
     host: str = "0.0.0.0"
     port: int = 8080
     timezone: str = "America/Los_Angeles"
+    closed_statuses: list[str] = field(default_factory=lambda: ["Resolved", "Closed"])
 
 
 @dataclass

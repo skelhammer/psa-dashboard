@@ -180,5 +180,6 @@ export async function exportPageAsPDF(title: string) {
     pdf.text(footerRight, pageWidth - margin - pdf.getTextWidth(footerRight), pageHeight - 3)
   }
 
-  pdf.save(`${title.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.pdf`)
+  const localDate = new Date().toLocaleDateString('en-CA')
+  pdf.save(`${title.replace(/\s+/g, '_').toLowerCase()}_${localDate}.pdf`)
 }

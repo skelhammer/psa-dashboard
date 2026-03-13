@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import FilterParams
-from app.api.queries import CLOSED_STATUSES_SQL, OPEN_STATUSES_SQL
+from app.api.queries import CLOSED_STATUSES_SQL
 from app.config import get_settings
 
 router = APIRouter(prefix="/api", tags=["executive"])
@@ -205,7 +205,7 @@ async def executive_report(request: Request, filters: FilterParams = Depends()):
     # Open backlog (current snapshot)
     backlog_extra = f" AND {extra_sql}" if extra_sql else ""
     open_count = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status IN {OPEN_STATUSES_SQL}{backlog_extra}",
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL}{backlog_extra}",
         extra_params,
     )
     current["open_backlog"] = open_count[0][0] or 0
@@ -385,7 +385,7 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
             [start_iso, end_iso] + tech_params,
         )
         open_row = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE status IN {OPEN_STATUSES_SQL} AND {tech_extra}",
+            f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND {tech_extra}",
             tech_params,
         )
 

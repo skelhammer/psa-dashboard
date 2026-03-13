@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import FilterParams
-from app.api.queries import CLOSED_STATUSES_SQL, OPEN_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
 from app.config import get_settings
 
 router = APIRouter(prefix="/api", tags=["clients"])
@@ -125,7 +125,7 @@ async def clients_list(request: Request, filters: FilterParams = Depends()):
 
         # Open tickets (current)
         open_count = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN {OPEN_STATUSES_SQL}{extra_and}",
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status NOT IN {CLOSED_STATUSES_SQL}{extra_and}",
             [client_id, *extra_params],
         )
 
@@ -264,7 +264,7 @@ async def client_detail(cid: str, request: Request, filters: FilterParams = Depe
 
     # KPI metrics
     open_count = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN {OPEN_STATUSES_SQL}{extra_and}",
+        f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status NOT IN {CLOSED_STATUSES_SQL}{extra_and}",
         [client_id, *extra_params],
     )
 
@@ -319,7 +319,7 @@ async def client_detail(cid: str, request: Request, filters: FilterParams = Depe
     # Open tickets list
     open_tickets_rows = await conn.execute_fetchall(
         f"""SELECT * FROM tickets
-            WHERE client_id = ? AND status IN {OPEN_STATUSES_SQL}{extra_and}
+            WHERE client_id = ? AND status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
             ORDER BY {PRIORITY_ORDER} DESC, first_response_due ASC""",
         [client_id, *extra_params],
     )

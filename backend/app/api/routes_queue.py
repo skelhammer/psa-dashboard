@@ -6,7 +6,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Query, Request
 
-from app.api.queries import OPEN_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
 
 router = APIRouter(prefix="/api", tags=["work-queue"])
 
@@ -107,7 +107,7 @@ async def work_queue(
     db = request.app.state.db
     conn = await db.get_connection()
 
-    conditions = [f"status IN {OPEN_STATUSES_SQL}"]
+    conditions = [f"status NOT IN {CLOSED_STATUSES_SQL}"]
     params: list = []
 
     if client_id:

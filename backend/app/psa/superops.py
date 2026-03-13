@@ -6,11 +6,12 @@ All SuperOps-specific field names and API quirks are contained here.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 
-from app.config import SuperOpsConfig
+from app.config import SuperOpsConfig, get_settings
 from app.models import (
     Category,
     Client,
@@ -141,17 +142,27 @@ query getTicketConversationList($input: TicketIdentifierInput!) {
 """
 
 
+def _get_local_tz() -> ZoneInfo:
+    return ZoneInfo(get_settings().server.timezone)
+
+
 def _parse_datetime(val: str | None) -> datetime | None:
+    """Parse a datetime string from SuperOps (UTC) and convert to local time."""
     if not val:
         return None
     try:
-        return datetime.fromisoformat(val.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         try:
-            return datetime.strptime(val, "%Y-%m-%dT%H:%M:%S")
+            dt = datetime.strptime(val, "%Y-%m-%dT%H:%M:%S")
         except (ValueError, AttributeError):
             logger.warning("Could not parse datetime: %s", val)
             return None
+    # Treat naive datetimes as UTC, convert to local time, store as naive local
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local_dt = dt.astimezone(_get_local_tz())
+    return local_dt.replace(tzinfo=None)
 
 
 def _parse_worklog_minutes(val: str | None) -> int:
@@ -346,6 +357,11 @@ class SuperOpsProvider(PSAProvider):
         extra_input["sort"] = [{"attribute": "updatedTime", "order": "DESC"}]
 
         if filters.updated_since:
+            # Convert local time back to UTC for SuperOps API
+            local_tz = _get_local_tz()
+            utc_since = filters.updated_since.replace(tzinfo=local_tz).astimezone(
+                timezone.utc
+            ).replace(tzinfo=None)
             # For incremental sync, add updatedTime filter
             if "condition" in extra_input:
                 existing = extra_input["condition"]
@@ -356,7 +372,7 @@ class SuperOpsProvider(PSAProvider):
                         {
                             "attribute": "updatedTime",
                             "operator": "greaterThan",
-                            "value": filters.updated_since.isoformat(),
+                            "value": utc_since.isoformat(),
                         },
                     ],
                 }
@@ -364,7 +380,7 @@ class SuperOpsProvider(PSAProvider):
                 extra_input["condition"] = {
                     "attribute": "updatedTime",
                     "operator": "greaterThan",
-                    "value": filters.updated_since.isoformat(),
+                    "value": utc_since.isoformat(),
                 }
 
         # For paginated single-page requests

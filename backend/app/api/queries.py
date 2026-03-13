@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.config import get_settings
+
 PRIORITY_ORDER = """
 CASE priority
     WHEN 'Critical' THEN 5
@@ -14,8 +16,14 @@ CASE priority
 END
 """
 
-OPEN_STATUSES_SQL = "('Open', 'Customer Replied', 'Under Investigation', 'On Hold', 'Waiting on Customer', 'Waiting on third party', 'Waiting on Order', 'Scheduled')"
-CLOSED_STATUSES_SQL = "('Resolved', 'Closed')"
+
+def _build_closed_statuses_sql() -> str:
+    statuses = get_settings().server.closed_statuses
+    return "(" + ", ".join(f"'{s}'" for s in statuses) + ")"
+
+
+# Built at import time from config
+CLOSED_STATUSES_SQL = _build_closed_statuses_sql()
 
 
 def ticket_row_to_dict(row) -> dict:

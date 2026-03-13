@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import FilterParams
-from app.api.queries import CLOSED_STATUSES_SQL, OPEN_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
 
 router = APIRouter(prefix="/api", tags=["technicians"])
 
@@ -55,7 +55,7 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
 
         # Open tickets (not date-filtered, always current)
         open_count = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND status IN {OPEN_STATUSES_SQL}{extra_and}",
+            f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND status NOT IN {CLOSED_STATUSES_SQL}{extra_and}",
             [tech_id, *extra_params],
         )
 
@@ -111,7 +111,7 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
 
         # Stale tickets (always current, not date-filtered)
         stale = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND status IN {OPEN_STATUSES_SQL} AND updated_time < ?{extra_and}",
+            f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND status NOT IN {CLOSED_STATUSES_SQL} AND updated_time < ?{extra_and}",
             [tech_id, stale_cutoff, *extra_params],
         )
 
@@ -207,7 +207,7 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
     # --- KPI queries ---
 
     open_count = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND status IN {OPEN_STATUSES_SQL}{extra_and}",
+        f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND status NOT IN {CLOSED_STATUSES_SQL}{extra_and}",
         [tech_id, *extra_params],
     )
 
@@ -258,7 +258,7 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
     utilization = round((worklog_hours / available_hours * 100) if available_hours > 0 else 0, 1)
 
     stale = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND status IN {OPEN_STATUSES_SQL} AND updated_time < ?{extra_and}",
+        f"SELECT COUNT(*) FROM tickets WHERE technician_id = ? AND status NOT IN {CLOSED_STATUSES_SQL} AND updated_time < ?{extra_and}",
         [tech_id, stale_cutoff, *extra_params],
     )
 
@@ -344,7 +344,7 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
     # --- Open tickets ---
     open_tickets = await conn.execute_fetchall(
         f"""SELECT * FROM tickets
-            WHERE technician_id = ? AND status IN {OPEN_STATUSES_SQL}{extra_and}
+            WHERE technician_id = ? AND status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
             ORDER BY {PRIORITY_ORDER} DESC, first_response_due ASC""",
         [tech_id, *extra_params],
     )

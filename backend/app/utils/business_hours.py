@@ -21,15 +21,14 @@ def calculate_business_minutes(
     Parameters
     ----------
     start, end : datetime
-        Naive datetimes assumed to be UTC, or timezone-aware datetimes.
+        Naive datetimes in local time (server timezone).
     config : object
         Must expose ``start_hour`` (int), ``end_hour`` (int),
         ``work_days`` (list[int], 1=Mon..7=Sun), and
         ``holidays`` (list[str] of ISO date strings like "2026-01-01").
     tz_name : str, optional
-        IANA timezone name (e.g. "America/Los_Angeles"). If provided,
-        timestamps are converted from UTC to this timezone before
-        comparing against business hours.
+        Kept for API compatibility but no longer used for conversion.
+        Timestamps are already stored in local time.
 
     Returns
     -------
@@ -47,19 +46,9 @@ def calculate_business_minutes(
     }
     minutes_per_day = (bh_end - bh_start) * 60
 
-    # Convert to local timezone if specified (timestamps are stored as UTC)
-    if tz_name:
-        local_tz = ZoneInfo(tz_name)
-        # Treat naive datetimes as UTC
-        if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
-        if end.tzinfo is None:
-            end = end.replace(tzinfo=timezone.utc)
-        s = start.astimezone(local_tz).replace(tzinfo=None)
-        e = end.astimezone(local_tz).replace(tzinfo=None)
-    else:
-        s = start.replace(tzinfo=None)
-        e = end.replace(tzinfo=None)
+    # Timestamps are already in local time; just strip any tzinfo
+    s = start.replace(tzinfo=None)
+    e = end.replace(tzinfo=None)
 
     def _is_work_day(d: date) -> bool:
         return d.isoweekday() in work_days and d not in holidays
