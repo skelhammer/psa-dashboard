@@ -61,7 +61,7 @@ async def billing_flags(
     rows = await conn.execute_fetchall(
         f"""SELECT bf.*, t.display_id, t.subject, t.client_id, t.client_name,
                t.technician_id, t.technician_name, t.status, t.priority,
-               t.created_time, t.worklog_minutes
+               t.created_time, t.worklog_hours
            FROM billing_flags bf
            JOIN tickets t ON bf.ticket_id = t.id
            WHERE {where}
@@ -88,7 +88,7 @@ async def billing_flags(
             "resolved_by": row["resolved_by"],
             "resolved_at": row["resolved_at"],
             "resolution_note": row["resolution_note"],
-            "worklog_minutes": row["worklog_minutes"],
+            "worklog_hours": row["worklog_hours"],
             "created_time": row["created_time"],
             "url": provider.get_ticket_url(row["ticket_id"]),
         })
@@ -172,11 +172,11 @@ async def billing_summary(request: Request, filters: FilterParams = Depends()):
             [cid, *client_date_params],
         )
         with_time = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond} AND worklog_minutes > 0",
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond} AND worklog_hours > 0",
             [cid, *client_date_params],
         )
         hours = await conn.execute_fetchall(
-            f"SELECT SUM(worklog_minutes) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond}",
+            f"SELECT SUM(worklog_hours) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond}",
             [cid, *client_date_params],
         )
         flags = await conn.execute_fetchall(
@@ -200,7 +200,7 @@ async def billing_summary(request: Request, filters: FilterParams = Depends()):
             "tickets_with_time": with_time_count,
             "tickets_missing_time": missing,
             "missing_pct": round((missing / total_count * 100) if total_count > 0 else 0, 1),
-            "billed_hours": round((hours[0][0] or 0) / 60, 1),
+            "billed_hours": round(hours[0][0] or 0, 1),
             "unresolved_flags": flags[0][0],
         })
 

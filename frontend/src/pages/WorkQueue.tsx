@@ -23,7 +23,7 @@ export default function WorkQueue() {
     priority: t.priority,
     status: t.status,
     created_time: t.created_time,
-    worklog_minutes: t.worklog_minutes,
+    worklog_hours: t.worklog_hours,
     score: t.score,
   }))
 
@@ -48,7 +48,7 @@ export default function WorkQueue() {
             { key: 'priority', label: 'Priority' },
             { key: 'status', label: 'Status' },
             { key: 'created_time', label: 'Created' },
-            { key: 'worklog_minutes', label: 'Time (min)' },
+            { key: 'worklog_hours', label: 'Time (hrs)' },
             { key: 'score', label: 'Score' },
           ]}
           pageTitle="Work Queue"

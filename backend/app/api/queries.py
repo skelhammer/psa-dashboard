@@ -51,7 +51,7 @@ def ticket_row_to_dict(row) -> dict:
         "resolution_due": row["resolution_due"],
         "resolution_time": row["resolution_time"],
         "resolution_violated": bool(row["resolution_violated"]) if row["resolution_violated"] is not None else None,
-        "worklog_minutes": row["worklog_minutes"],
+        "worklog_hours": row["worklog_hours"],
         "conversation_count": row["conversation_count"],
         "tech_reply_count": row["tech_reply_count"],
         "last_conversation_time": row["last_conversation_time"],

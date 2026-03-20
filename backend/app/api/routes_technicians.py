@@ -106,10 +106,10 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
 
         # Worklog hours (tickets resolved in period)
         worklog = await conn.execute_fetchall(
-            f"SELECT SUM(worklog_minutes) FROM tickets WHERE technician_id = ? AND status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time <= ?{extra_and}",
+            f"SELECT SUM(worklog_hours) FROM tickets WHERE technician_id = ? AND status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time <= ?{extra_and}",
             [tech_id, period_start, period_end, *extra_params],
         )
-        worklog_hours = round((worklog[0][0] or 0) / 60, 1)
+        worklog_hours = round(worklog[0][0] or 0, 1)
 
         # Utilization (worklog hours / available hours for the period)
         available_per_week = tech["available_hours_per_week"] or 40
@@ -143,7 +143,7 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
                JOIN billing_config bc ON t.client_id = bc.client_id
                WHERE t.technician_id = ? AND bc.track_billing = 1
                AND t.status IN ('Resolved', 'Closed') AND t.resolution_time >= ? AND t.resolution_time <= ?
-               AND t.worklog_minutes > 0{extra_and_t}""",
+               AND t.worklog_hours > 0{extra_and_t}""",
             [tech_id, period_start, period_end, *extra_params],
         )
         billable_total = billable_tickets[0][0] or 0
@@ -256,10 +256,10 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
     )
 
     worklog = await conn.execute_fetchall(
-        f"SELECT SUM(worklog_minutes) FROM tickets WHERE technician_id = ? AND status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time <= ?{extra_and}",
+        f"SELECT SUM(worklog_hours) FROM tickets WHERE technician_id = ? AND status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time <= ?{extra_and}",
         [tech_id, period_start, period_end, *extra_params],
     )
-    worklog_hours = round((worklog[0][0] or 0) / 60, 1)
+    worklog_hours = round(worklog[0][0] or 0, 1)
 
     available_per_week = tech["available_hours_per_week"] or 40
     period_days = max((filters.date_to - filters.date_from).days, 1) if filters.date_to else max((now - filters.date_from).days, 1)
@@ -496,12 +496,12 @@ async def teams_list(request: Request, filters: FilterParams = Depends()):
 
         # Hours logged
         worklog = await conn.execute_fetchall(
-            f"""SELECT SUM(worklog_minutes) FROM tickets
+            f"""SELECT SUM(worklog_hours) FROM tickets
                 WHERE {group_filter} AND status IN {CLOSED_STATUSES_SQL}
                 AND resolution_time >= ? AND resolution_time <= ?""",
             group_param + [period_start, period_end],
         )
-        hours = round((worklog[0][0] or 0) / 60, 1)
+        hours = round(worklog[0][0] or 0, 1)
 
         # Member count (distinct technicians with tickets in this group)
         members = await conn.execute_fetchall(

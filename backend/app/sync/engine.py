@@ -360,7 +360,7 @@ class SyncEngine:
                 created_time, updated_time,
                 first_response_due, first_response_time, first_response_violated,
                 resolution_due, resolution_time, resolution_violated,
-                worklog_minutes,
+                worklog_hours,
                 conversation_count, tech_reply_count,
                 last_conversation_time, last_responder_type,
                 reopened, synced_at
@@ -397,7 +397,7 @@ class SyncEngine:
                 ticket.resolution_due.isoformat() if ticket.resolution_due else None,
                 ticket.resolution_time.isoformat() if ticket.resolution_time else None,
                 1 if ticket.resolution_violated else (0 if ticket.resolution_violated is False else None),
-                ticket.worklog_minutes,
+                ticket.worklog_hours,
                 0, 0,  # conversation_count, tech_reply_count (updated by hooks)
                 None, None,  # last_conversation_time, last_responder_type (updated by hooks)
                 1 if reopened else 0,

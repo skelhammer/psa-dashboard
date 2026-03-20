@@ -58,7 +58,7 @@ def _ticket(
     status: str = "Open",
     priority: str = "Medium",
     age_hours: float = 24,
-    worklog: int = 0,
+    worklog: float = 0,
     sla_name: str | None = "Standard SLA",
     fr_due_hours: float | None = 4,
     res_due_hours: float | None = 24,
@@ -100,7 +100,7 @@ def _ticket(
         resolution_due=created + timedelta(hours=res_due_hours) if res_due_hours else None,
         resolution_time=created + timedelta(hours=res_time_hours) if res_time_hours else None,
         resolution_violated=res_violated,
-        worklog_minutes=worklog,
+        worklog_hours=worklog,
     )
 
 
@@ -110,45 +110,45 @@ MOCK_TICKETS = [
     _ticket(2, "New employee laptop setup", client_idx=2, tech_idx=None, priority="Medium", age_hours=6, source="Portal"),
 
     # SLA violated (still open)
-    _ticket(3, "Email server down", client_idx=3, tech_idx=0, priority="Critical", age_hours=48, fr_violated=True, res_violated=True, fr_time_hours=1, worklog=60),
-    _ticket(4, "VPN connection failing for remote users", client_idx=1, tech_idx=1, priority="High", age_hours=30, fr_violated=False, res_violated=True, fr_time_hours=0.5, worklog=45),
+    _ticket(3, "Email server down", client_idx=3, tech_idx=0, priority="Critical", age_hours=48, fr_violated=True, res_violated=True, fr_time_hours=1, worklog=1.0),
+    _ticket(4, "VPN connection failing for remote users", client_idx=1, tech_idx=1, priority="High", age_hours=30, fr_violated=False, res_violated=True, fr_time_hours=0.5, worklog=0.75),
 
     # SLA breaching soon (due within 30 min)
     _ticket(5, "Outlook keeps crashing", client_idx=0, tech_idx=2, priority="Medium", age_hours=3.5, fr_due_hours=4, fr_time_hours=1),
-    _ticket(6, "Cannot access shared drive", client_idx=4, tech_idx=0, priority="High", age_hours=22, res_due_hours=24, fr_time_hours=0.5, worklog=30),
+    _ticket(6, "Cannot access shared drive", client_idx=4, tech_idx=0, priority="High", age_hours=22, res_due_hours=24, fr_time_hours=0.5, worklog=0.5),
 
     # Awaiting tech reply (customer replied, tech hasn't)
-    _ticket(7, "Slow computer performance", client_idx=2, tech_idx=1, priority="Low", age_hours=72, worklog=15, status="Customer Replied"),
-    _ticket(8, "Monitor flickering", client_idx=0, tech_idx=3, priority="Medium", age_hours=48, worklog=10, status="Customer Replied"),
+    _ticket(7, "Slow computer performance", client_idx=2, tech_idx=1, priority="Low", age_hours=72, worklog=0.25, status="Customer Replied"),
+    _ticket(8, "Monitor flickering", client_idx=0, tech_idx=3, priority="Medium", age_hours=48, worklog=0.15, status="Customer Replied"),
 
     # Stale tickets (no update in 3+ days)
     _ticket(9, "Software license renewal", client_idx=1, tech_idx=2, priority="Low", age_hours=120, worklog=0),
     _ticket(10, "Backup job review", client_idx=3, tech_idx=3, priority="Low", age_hours=168, worklog=0),
 
     # Normal open tickets
-    _ticket(11, "Password reset for 3 users", client_idx=0, tech_idx=0, priority="Low", age_hours=4, worklog=15, fr_time_hours=0.5),
-    _ticket(12, "Install Adobe Acrobat on workstation", client_idx=2, tech_idx=1, priority="Low", age_hours=8, worklog=20, fr_time_hours=1),
-    _ticket(13, "Network switch replacement", client_idx=4, tech_idx=2, priority="High", age_hours=12, worklog=45, fr_time_hours=0.5),
-    _ticket(14, "Setup MFA for new department", client_idx=3, tech_idx=0, priority="Medium", age_hours=16, worklog=30, fr_time_hours=2),
+    _ticket(11, "Password reset for 3 users", client_idx=0, tech_idx=0, priority="Low", age_hours=4, worklog=0.25, fr_time_hours=0.5),
+    _ticket(12, "Install Adobe Acrobat on workstation", client_idx=2, tech_idx=1, priority="Low", age_hours=8, worklog=0.33, fr_time_hours=1),
+    _ticket(13, "Network switch replacement", client_idx=4, tech_idx=2, priority="High", age_hours=12, worklog=0.75, fr_time_hours=0.5),
+    _ticket(14, "Setup MFA for new department", client_idx=3, tech_idx=0, priority="Medium", age_hours=16, worklog=0.5, fr_time_hours=2),
     _ticket(15, "Firewall rule change request", client_idx=1, tech_idx=3, priority="Medium", age_hours=24, worklog=0, fr_time_hours=3),
 
     # Waiting on customer/third party
-    _ticket(16, "Server migration planning", client_idx=4, tech_idx=0, priority="Medium", age_hours=96, status="Waiting on Customer", worklog=120),
-    _ticket(17, "ISP circuit upgrade coordination", client_idx=3, tech_idx=1, priority="Medium", age_hours=72, status="Waiting on third party", worklog=30),
+    _ticket(16, "Server migration planning", client_idx=4, tech_idx=0, priority="Medium", age_hours=96, status="Waiting on Customer", worklog=2.0),
+    _ticket(17, "ISP circuit upgrade coordination", client_idx=3, tech_idx=1, priority="Medium", age_hours=72, status="Waiting on third party", worklog=0.5),
 
     # Recently resolved (for metrics)
-    _ticket(18, "Wireless AP replacement", client_idx=0, tech_idx=2, priority="Medium", age_hours=48, status="Resolved", worklog=90, fr_time_hours=0.5, res_time_hours=36),
-    _ticket(19, "Domain join failure", client_idx=2, tech_idx=3, priority="High", age_hours=24, status="Resolved", worklog=60, fr_time_hours=0.25, res_time_hours=12),
-    _ticket(20, "Printer driver update", client_idx=1, tech_idx=0, priority="Low", age_hours=12, status="Closed", worklog=15, fr_time_hours=1, res_time_hours=6),
+    _ticket(18, "Wireless AP replacement", client_idx=0, tech_idx=2, priority="Medium", age_hours=48, status="Resolved", worklog=1.5, fr_time_hours=0.5, res_time_hours=36),
+    _ticket(19, "Domain join failure", client_idx=2, tech_idx=3, priority="High", age_hours=24, status="Resolved", worklog=1.0, fr_time_hours=0.25, res_time_hours=12),
+    _ticket(20, "Printer driver update", client_idx=1, tech_idx=0, priority="Low", age_hours=12, status="Closed", worklog=0.25, fr_time_hours=1, res_time_hours=6),
 
     # Billable client tickets with no worklog (billing flags)
     _ticket(21, "Projector not connecting", client_idx=0, tech_idx=1, priority="Low", age_hours=36, status="Resolved", worklog=0, fr_time_hours=2, res_time_hours=24),
     _ticket(22, "UPS battery replacement", client_idx=4, tech_idx=2, priority="Medium", age_hours=60, status="Resolved", worklog=0, fr_time_hours=1, res_time_hours=48),
 
     # Under investigation
-    _ticket(23, "Intermittent network drops", client_idx=3, tech_idx=0, priority="High", age_hours=36, status="Under Investigation", worklog=90, fr_time_hours=0.5),
-    _ticket(24, "Database performance issues", client_idx=4, tech_idx=3, priority="Critical", age_hours=8, worklog=30, fr_time_hours=0.25),
-    _ticket(25, "Spam filter misconfiguration", client_idx=1, tech_idx=2, priority="Medium", age_hours=20, worklog=25, fr_time_hours=1),
+    _ticket(23, "Intermittent network drops", client_idx=3, tech_idx=0, priority="High", age_hours=36, status="Under Investigation", worklog=1.5, fr_time_hours=0.5),
+    _ticket(24, "Database performance issues", client_idx=4, tech_idx=3, priority="Critical", age_hours=8, worklog=0.5, fr_time_hours=0.25),
+    _ticket(25, "Spam filter misconfiguration", client_idx=1, tech_idx=2, priority="Medium", age_hours=20, worklog=0.4, fr_time_hours=1),
 ]
 
 MOCK_CONVERSATIONS: dict[str, list[Conversation]] = {

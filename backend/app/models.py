@@ -43,7 +43,7 @@ class Ticket:
     resolution_due: datetime | None = None
     resolution_time: datetime | None = None
     resolution_violated: bool | None = None
-    worklog_minutes: int = 0
+    worklog_hours: float = 0
 
 
 @dataclass

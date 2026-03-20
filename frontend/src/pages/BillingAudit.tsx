@@ -67,7 +67,7 @@ export default function BillingAudit() {
             client_name: f.client_name,
             technician_name: f.technician_name || 'Unassigned',
             priority: f.priority,
-            worklog_hours: f.worklog_minutes > 0 ? (f.worklog_minutes / 60).toFixed(1) : '0',
+            worklog_hours: f.worklog_hours > 0 ? f.worklog_hours.toFixed(1) : '0',
             flag_reason: f.flag_reason,
             resolved: f.resolved ? 'Yes' : 'No',
           }))}
@@ -165,7 +165,7 @@ export default function BillingAudit() {
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-xs tabular-nums text-gray-400">
-                    {flag.worklog_minutes > 0 ? `${(flag.worklog_minutes / 60).toFixed(1)}h` : '-'}
+                    {flag.worklog_hours > 0 ? `${flag.worklog_hours.toFixed(1)}h` : '-'}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-gray-400 max-w-[200px] truncate">{flag.flag_reason}</td>
                   <td className="px-3 py-2.5">

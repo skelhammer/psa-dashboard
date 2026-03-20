@@ -176,10 +176,10 @@ async def overview(request: Request, filters: FilterParams = Depends()):
 
     # Total worklog hours (selected period)
     worklog = await conn.execute_fetchall(
-        f"SELECT SUM(worklog_minutes) FROM tickets WHERE created_time >= ? AND created_time <= ?{extra_and}",
+        f"SELECT SUM(worklog_hours) FROM tickets WHERE created_time >= ? AND created_time <= ?{extra_and}",
         [period_start, period_end, *extra_params],
     )
-    total_worklog_hours = round((worklog[0][0] or 0) / 60, 1)
+    total_worklog_hours = round(worklog[0][0] or 0, 1)
 
     # Unresolved billing flags
     if extra_sql:
@@ -241,10 +241,10 @@ async def overview(request: Request, filters: FilterParams = Depends()):
     prev_sla_compliance = round(((prev_total_sla_val - prev_violated_val) / prev_total_sla_val * 100) if prev_total_sla_val > 0 else 100, 1)
 
     prev_worklog = await conn.execute_fetchall(
-        f"SELECT SUM(worklog_minutes) FROM tickets WHERE created_time >= ? AND created_time < ?{extra_and}",
+        f"SELECT SUM(worklog_hours) FROM tickets WHERE created_time >= ? AND created_time < ?{extra_and}",
         [prev_start_iso, prev_end_iso, *extra_params],
     )
-    prev_worklog_hours = round((prev_worklog[0][0] or 0) / 60, 1)
+    prev_worklog_hours = round(prev_worklog[0][0] or 0, 1)
 
     prev_reopened = await conn.execute_fetchall(
         f"SELECT COUNT(*) FROM tickets WHERE reopened = 1 AND updated_time >= ? AND updated_time < ?{extra_and}",

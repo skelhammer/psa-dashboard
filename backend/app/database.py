@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     resolution_due TEXT,
     resolution_time TEXT,
     resolution_violated INTEGER,
-    worklog_minutes INTEGER NOT NULL DEFAULT 0,
+    worklog_hours INTEGER NOT NULL DEFAULT 0,
     conversation_count INTEGER NOT NULL DEFAULT 0,
     tech_reply_count INTEGER NOT NULL DEFAULT 0,
     last_conversation_time TEXT,
@@ -245,6 +245,7 @@ MIGRATIONS = [
     "ALTER TABLE tickets ADD COLUMN resolution_business_minutes REAL",
     "ALTER TABLE billing_config ADD COLUMN monthly_contract_value REAL",
     "ALTER TABLE technicians ADD COLUMN dashboard_role TEXT NOT NULL DEFAULT 'technician'",
+    "ALTER TABLE tickets RENAME COLUMN worklog_minutes TO worklog_hours",
 ]
 
 

@@ -171,12 +171,12 @@ async def clients_list(request: Request, filters: FilterParams = Depends()):
 
         # Billed hours (closed tickets in period)
         worklog = await conn.execute_fetchall(
-            f"""SELECT SUM(worklog_minutes) FROM tickets
+            f"""SELECT SUM(worklog_hours) FROM tickets
                WHERE client_id = ? AND status IN {CLOSED_STATUSES_SQL}
                AND resolution_time >= ? AND resolution_time <= ?{extra_and}""",
             [client_id, period_start, period_end, *extra_params],
         )
-        billed_hours = round((worklog[0][0] or 0) / 60, 1)
+        billed_hours = round(worklog[0][0] or 0, 1)
 
         # Reopened count
         reopened = await conn.execute_fetchall(
@@ -199,7 +199,7 @@ async def clients_list(request: Request, filters: FilterParams = Depends()):
                WHERE t.client_id = ? AND bc.track_billing = 1
                AND t.status IN ('Resolved', 'Closed')
                AND t.resolution_time >= ? AND t.resolution_time <= ?
-               AND t.worklog_minutes > 0{extra_and_t}""",
+               AND t.worklog_hours > 0{extra_and_t}""",
             [client_id, period_start, period_end, *extra_params],
         )
         billable_total = billable_tickets[0][0] or 0
@@ -267,11 +267,11 @@ async def clients_profitability(request: Request, filters: FilterParams = Depend
 
         # Hours consumed in period
         hours_row = await conn.execute_fetchall(
-            """SELECT SUM(worklog_minutes) FROM tickets
+            """SELECT SUM(worklog_hours) FROM tickets
                WHERE client_id = ? AND created_time >= ? AND created_time <= ?""",
             [client_id, period_start, period_end],
         )
-        hours_consumed = round((hours_row[0][0] or 0) / 60, 2)
+        hours_consumed = round(hours_row[0][0] or 0, 2)
 
         # Ticket count
         ticket_row = await conn.execute_fetchall(
@@ -393,12 +393,12 @@ async def client_detail(cid: str, request: Request, filters: FilterParams = Depe
     )
 
     worklog = await conn.execute_fetchall(
-        f"""SELECT SUM(worklog_minutes) FROM tickets
+        f"""SELECT SUM(worklog_hours) FROM tickets
            WHERE client_id = ? AND status IN {CLOSED_STATUSES_SQL}
            AND resolution_time >= ? AND resolution_time <= ?{extra_and}""",
         [client_id, period_start, period_end, *extra_params],
     )
-    billed_hours = round((worklog[0][0] or 0) / 60, 1)
+    billed_hours = round(worklog[0][0] or 0, 1)
 
     # Open tickets list
     open_tickets_rows = await conn.execute_fetchall(

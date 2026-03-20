@@ -18,10 +18,10 @@ export function formatDuration(minutes: number): string {
 }
 
 /**
- * Format minutes into worklog display: "1.5h", "0.25h"
+ * Format hours into worklog display: "1.5h", "0.25h"
  */
-export function formatWorklogHours(minutes: number): string {
-  return `${(minutes / 60).toFixed(1)}h`
+export function formatWorklogHours(hours: number): string {
+  return `${hours.toFixed(1)}h`
 }
 
 /**

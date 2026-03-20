@@ -165,15 +165,14 @@ def _parse_datetime(val: str | None) -> datetime | None:
     return local_dt.replace(tzinfo=None)
 
 
-def _parse_worklog_minutes(val: str | None) -> int:
-    """Parse worklogTimespent string (hours, e.g. '3.25') to integer minutes."""
+def _parse_worklog_hours(val: str | None) -> float:
+    """Parse worklogTimespent string (hours, e.g. '3.25') to float hours."""
     if not val:
-        return 0
+        return 0.0
     try:
-        hours = float(val)
-        return round(hours * 60)
+        return round(float(val), 2)
     except (ValueError, TypeError):
-        return 0
+        return 0.0
 
 
 def _safe_str(obj: dict | None, key: str, default: str = "") -> str:
@@ -228,7 +227,7 @@ def _map_ticket(raw: dict) -> Ticket:
         resolution_due=_parse_datetime(raw.get("resolutionDueTime")),
         resolution_time=_parse_datetime(raw.get("resolutionTime")),
         resolution_violated=raw.get("resolutionViolated"),
-        worklog_minutes=_parse_worklog_minutes(raw.get("worklogTimespent")),
+        worklog_hours=_parse_worklog_hours(raw.get("worklogTimespent")),
     )
 
 

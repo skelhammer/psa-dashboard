@@ -118,9 +118,9 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
     """Generate billing flags for billable client tickets missing worklogs.
 
     Rules (for clients where track_billing = true):
-    - MISSING_WORKLOG: Resolved/Closed, worklog_minutes is 0 or null
-    - ZERO_TIME: Has worklog entries but sum to 0 (detected by worklog_minutes = 0 with activity)
-    - LOW_TIME: Resolved/Closed and worklog_minutes < minimum_bill_minutes
+    - MISSING_WORKLOG: Resolved/Closed, worklog_hours is 0 or null
+    - ZERO_TIME: Has worklog entries but sum to 0 (detected by worklog_hours = 0 with activity)
+    - LOW_TIME: Resolved/Closed and worklog_hours < minimum_bill_minutes
     """
     now = datetime.now().isoformat()
 
@@ -135,13 +135,15 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
         return
 
     for client_id, min_minutes in billable:
+        min_hours = min_minutes / 60  # Convert config (minutes) to hours for comparison
+
         # MISSING_WORKLOG: resolved/closed tickets with 0 worklog
         tickets = await conn.execute_fetchall(
             """SELECT id, display_id, subject
                FROM tickets
                WHERE client_id = ?
                  AND status IN ('Resolved', 'Closed')
-                 AND (worklog_minutes IS NULL OR worklog_minutes = 0)""",
+                 AND (worklog_hours IS NULL OR worklog_hours = 0)""",
             (client_id,),
         )
 
@@ -161,15 +163,15 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
                 )
 
         # LOW_TIME: resolved/closed tickets with worklog < minimum
-        if min_minutes > 0:
+        if min_hours > 0:
             low_tickets = await conn.execute_fetchall(
-                """SELECT id, display_id, worklog_minutes
+                """SELECT id, display_id, worklog_hours
                    FROM tickets
                    WHERE client_id = ?
                      AND status IN ('Resolved', 'Closed')
-                     AND worklog_minutes > 0
-                     AND worklog_minutes < ?""",
-                (client_id, min_minutes),
+                     AND worklog_hours > 0
+                     AND worklog_hours < ?""",
+                (client_id, min_hours),
             )
 
             for ticket in low_tickets:
@@ -184,7 +186,7 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
                     await conn.execute(
                         """INSERT INTO billing_flags (ticket_id, flag_type, flag_reason, flagged_at)
                            VALUES (?, 'LOW_TIME', ?, ?)""",
-                        (ticket_id, f"Only {logged} minutes logged (minimum: {min_minutes})", now),
+                        (ticket_id, f"Only {logged}h logged (minimum: {min_minutes}min)", now),
                     )
 
     # Auto-resolve flags where worklog time has appeared
@@ -194,9 +196,36 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
            WHERE resolved = 0
              AND flag_type IN ('MISSING_WORKLOG', 'ZERO_TIME')
              AND ticket_id IN (
-                 SELECT id FROM tickets WHERE worklog_minutes > 0
+                 SELECT id FROM tickets WHERE worklog_hours > 0
              )""",
         (now,),
+    )
+
+    # Auto-resolve LOW_TIME flags where worklog now meets the minimum
+    await conn.execute(
+        """UPDATE billing_flags
+           SET resolved = 1, resolved_at = ?, resolution_note = 'Auto-resolved: worklog time updated above minimum'
+           WHERE resolved = 0
+             AND flag_type = 'LOW_TIME'
+             AND ticket_id IN (
+                 SELECT t.id FROM tickets t
+                 JOIN billing_config bc ON t.client_id = bc.client_id
+                 WHERE t.worklog_hours >= (bc.minimum_bill_minutes / 60.0)
+             )""",
+        (now,),
+    )
+
+    # Update stale LOW_TIME flag reasons to reflect current worklog
+    await conn.execute(
+        """UPDATE billing_flags
+           SET flag_reason = 'Only ' || (
+               SELECT t.worklog_hours FROM tickets t WHERE t.id = billing_flags.ticket_id
+           ) || 'h logged (minimum: ' || (
+               SELECT bc.minimum_bill_minutes FROM tickets t2
+               JOIN billing_config bc ON t2.client_id = bc.client_id
+               WHERE t2.id = billing_flags.ticket_id
+           ) || 'min)'
+           WHERE resolved = 0 AND flag_type = 'LOW_TIME'"""
     )
 
     logger.info("Billing flag generation complete")

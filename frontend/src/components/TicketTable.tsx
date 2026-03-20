@@ -19,7 +19,7 @@ interface Ticket {
   first_response_violated?: boolean | null
   resolution_due?: string | null
   resolution_violated?: boolean | null
-  worklog_minutes: number
+  worklog_hours: number
   url?: string
   rank?: number
   score?: number
@@ -105,12 +105,12 @@ const defaultColumns: Column[] = [
     render: (t) => <SlaCountdown ticket={t} />,
   },
   {
-    key: 'worklog_minutes',
+    key: 'worklog_hours',
     label: 'Time',
     sortable: true,
     render: (t) => (
       <span className="text-xs tabular-nums text-gray-400">
-        {t.worklog_minutes > 0 ? formatWorklogHours(t.worklog_minutes) : '-'}
+        {t.worklog_hours > 0 ? formatWorklogHours(t.worklog_hours) : '-'}
       </span>
     ),
   },

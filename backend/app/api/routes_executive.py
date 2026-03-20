@@ -141,10 +141,10 @@ async def _period_metrics(conn, start_iso: str, end_iso: str, extra_sql: str = "
 
     # Total worklog hours
     worklog = await conn.execute_fetchall(
-        f"SELECT SUM(worklog_minutes) FROM tickets WHERE created_time >= ? AND created_time < ?{extra}",
+        f"SELECT SUM(worklog_hours) FROM tickets WHERE created_time >= ? AND created_time < ?{extra}",
         [start_iso, end_iso] + ep,
     )
-    worklog_hours = round((worklog[0][0] or 0) / 60, 1)
+    worklog_hours = round(worklog[0][0] or 0, 1)
 
     # Reopened
     reopened = await conn.execute_fetchall(
@@ -166,7 +166,7 @@ async def _period_metrics(conn, start_iso: str, end_iso: str, extra_sql: str = "
             JOIN billing_config bc ON t.client_id = bc.client_id AND bc.track_billing = 1
             WHERE t.status IN {CLOSED_STATUSES_SQL}
               AND t.resolution_time >= ? AND t.resolution_time < ?
-              AND t.worklog_minutes > 0{extra_t}""",
+              AND t.worklog_hours > 0{extra_t}""",
         [start_iso, end_iso] + ep,
     )
     bt = billable_total[0][0] or 0
@@ -222,9 +222,9 @@ async def executive_report(request: Request, filters: FilterParams = Depends()):
     )
     if techs:
         weeks_in_period = max((end - start).days / 7, 1)
-        total_available = sum((t[0] or 40) * weeks_in_period * 60 for t in techs)
+        total_available = sum((t[0] or 40) * weeks_in_period for t in techs)
         total_worked = await conn.execute_fetchall(
-            f"SELECT SUM(worklog_minutes) FROM tickets WHERE created_time >= ? AND created_time < ?{backlog_extra}",
+            f"SELECT SUM(worklog_hours) FROM tickets WHERE created_time >= ? AND created_time < ?{backlog_extra}",
             [start_iso, end_iso] + extra_params,
         )
         worked = total_worked[0][0] or 0
@@ -359,7 +359,7 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
     for tech in tech_rows:
         tid = tech[0]
         name = f"{tech[1]} {tech[2]}".strip()
-        avail = (tech[3] or 40) * weeks_in_period * 60
+        avail = (tech[3] or 40) * weeks_in_period
 
         tech_extra = f"technician_id = ?{' AND ' + extra_sql if extra_sql else ''}"
         tech_params = [tid] + extra_params
@@ -381,7 +381,7 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
             [start_iso, end_iso] + tech_params,
         )
         worklog_row = await conn.execute_fetchall(
-            f"SELECT SUM(worklog_minutes) FROM tickets WHERE created_time >= ? AND created_time < ? AND {tech_extra}",
+            f"SELECT SUM(worklog_hours) FROM tickets WHERE created_time >= ? AND created_time < ? AND {tech_extra}",
             [start_iso, end_iso] + tech_params,
         )
         open_row = await conn.execute_fetchall(
@@ -402,7 +402,7 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
             "sla_pct": sla_pct,
             "utilization_pct": util,
             "avg_resolution_minutes": round(avg_res_row[0][0] or 0, 1),
-            "worklog_hours": round(worked / 60, 1),
+            "worklog_hours": round(worked, 1),
         })
 
     team_summary.sort(key=lambda t: t["closed"], reverse=True)
@@ -464,7 +464,7 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
                 JOIN billing_config bc ON t.client_id = bc.client_id AND bc.track_billing = 1
                 WHERE t.status IN {CLOSED_STATUSES_SQL}
                   AND t.resolution_time >= ? AND t.resolution_time < ?
-                  AND t.worklog_minutes > 0{extra_t}""",
+                  AND t.worklog_hours > 0{extra_t}""",
             [iv_start.isoformat(), iv_end.isoformat()] + extra_params,
         )
         bt_val = bt_row[0][0] or 0
