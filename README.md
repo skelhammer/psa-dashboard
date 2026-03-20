@@ -8,17 +8,25 @@ A real-time helpdesk metrics dashboard that syncs with your PSA (Professional Se
 - **Work Queue:** Scored and ranked open tickets prioritized by SLA urgency, priority, and age
 - **Technician Performance:** Sortable table view and leaderboard with gold/silver/bronze trophy rankings. Multiple leaderboard modes (productivity, response time, resolution time, SLA compliance, hours billed). Per-tech detail pages with KPI cards, volume/SLA trend charts, category/client breakdowns, and open ticket lists.
 - **Client Health:** Per-client metrics with SLA compliance, ticket volume, and drill-down detail pages with trend charts and category breakdowns
-- **Billing Audit:** Flags for billable client tickets missing worklogs, with per-client summaries and resolution tracking
+- **Billing Audit:** Flags for billable client tickets missing worklogs, with per-client summaries, profitability metrics, and resolution tracking
 - **Manage to Zero:** Zero-target cards for unassigned tickets, SLA violations, stale tickets, and more
+- **Phone Analytics:** Call volume, duration, and queue metrics via Zoom Phone integration (or mock data)
+- **Executive Report:** CEO summary with high-level KPIs, alerts, and client profitability insights
+- **Alerts:** Threshold-based alert engine for SLA breaches, stale tickets, and workload imbalances
 - **Global Filters:** Date range presets with custom date pickers, plus client, technician, priority, and tech group filters on every page
 - **Auto Sync:** Background sync on a configurable interval with incremental updates, nightly full sync, and automatic cleanup of deleted tickets
 - **Export:** Per-page PDF export (portrait, multi-page with headers/footers) and CSV export (multi-section for overview, per-chart for individual charts)
 
-## Supported PSA Providers
+## Supported Providers
 
+### PSA
 - **SuperOps:** Full support (tickets, clients, technicians, contracts, conversations)
 - **Mock:** Built-in mock data for testing without API credentials
 - Architecture supports adding new providers (HaloPSA stub included)
+
+### Phone
+- **Zoom Phone:** Call logs, queue stats, user metrics
+- **Mock:** Built-in mock data for testing without API credentials
 
 ## Tech Stack
 
@@ -57,12 +65,19 @@ psa:
     api_token: YOUR_API_TOKEN
     subdomain: YOUR_SUBDOMAIN
 
-billing:
-  hourly_plans: ["Plan A", "Plan B"]       # Plans that bill hourly
-  unlimited_plans: ["Unlimited Plan"]       # Plans excluded from billing
+phone:
+  provider: mock  # or "zoom" for live data
+  zoom:
+    account_id: YOUR_ZOOM_ACCOUNT_ID
+    client_id: YOUR_ZOOM_CLIENT_ID
+    client_secret: YOUR_ZOOM_CLIENT_SECRET
 
 server:
   timezone: America/Los_Angeles  # Your IANA timezone
+
+billing:
+  unlimited_plans: ["MSP Platinum"]  # Contract names excluded from billing audit
+  tech_cost_per_hour: 55             # For profitability calculations
 ```
 
 ### 3. Install and run
@@ -148,12 +163,17 @@ psa-dashboard/
         base.py              # Abstract base class
         superops.py          # SuperOps GraphQL implementation
         mock.py              # Mock data provider
-      sync/                  # Sync engine and post-sync hooks
+      phone/                 # Phone provider abstraction
+        base.py              # Abstract base class
+        zoom.py              # Zoom Phone implementation
+        mock.py              # Mock data provider
+      alerts/                # Threshold-based alert engine
+      sync/                  # Sync engine, hooks, phone sync, scheduler
       config.py              # Settings loader
       database.py            # SQLite schema
       models.py              # PSA-agnostic data models
     data/
-      metrics.db             # SQLite database (auto-created)
+      metrics.db             # SQLite database (auto-created, gitignored)
   frontend/
     src/
       api/                   # API client and React Query hooks
@@ -168,13 +188,24 @@ psa-dashboard/
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
 | `psa.provider` | | `mock` | PSA provider: `superops` or `mock` |
-| `sync.interval_minutes` | | `15` | Minutes between background syncs |
+| `phone.provider` | | `mock` | Phone provider: `zoom`, `mock`, or `none` |
+| `sync.interval_minutes` | | `15` | Minutes between PSA background syncs |
+| `phone_sync.interval_minutes` | | `5` | Minutes between phone data syncs |
+| `phone_sync.lookback_days` | | `30` | Days of phone history to sync |
 | `database.path` | | `./data/metrics.db` | SQLite database file path |
 | `server.host` | | `0.0.0.0` | Backend listen address |
 | `server.port` | | `8080` | Backend listen port |
 | `server.timezone` | | `America/Los_Angeles` | IANA timezone for date calculations |
-| `billing.hourly_plans` | | `[]` | Client plan names that indicate hourly billing |
-| `billing.unlimited_plans` | | `[]` | Client plan names excluded from billing audit |
+| `server.closed_statuses` | | `["Resolved", "Closed"]` | Ticket statuses considered terminal |
+| `billing.unlimited_plans` | | `[]` | Contract names excluded from billing audit |
+| `billing.tech_cost_per_hour` | | `55` | Average fully-loaded cost per tech hour |
 | `thresholds.stale_ticket_days` | | `3` | Days before an open ticket is considered stale |
 | `thresholds.sla_warning_minutes` | | `30` | Minutes before SLA breach to show warning |
 | `thresholds.max_tickets_per_tech` | | `20` | Target max open tickets per technician |
+| `thresholds.utilization_target_min` | | `60` | Minimum utilization % (green zone) |
+| `thresholds.utilization_target_max` | | `85` | Maximum utilization % (green zone) |
+| `business_hours.enabled` | | `true` | Enable business hours filtering |
+| `business_hours.start_hour` | | `8` | Business day start (24h) |
+| `business_hours.end_hour` | | `17` | Business day end (24h) |
+| `business_hours.work_days` | | `[1,2,3,4,5]` | Working days (Mon=1 through Fri=5) |
+| `business_hours.holidays` | | `[]` | ISO dates to exclude (e.g., `["2026-01-01"]`) |
