@@ -32,7 +32,17 @@
       "Bash(while read:*)",
       "Bash(do taskkill:*)",
       "Bash(done)",
-      "Bash(sleep 4 && curl -s \"http://localhost:8080/api/overview\" | python -c \"import sys,json; d=json.load\\(sys.stdin\\)['kpis']; print\\(f\\\\\"Reopened: {d['reopened_period']}\\\\\"\\)\")"
+      "Bash(sleep 4 && curl -s \"http://localhost:8080/api/overview\" | python -c \"import sys,json; d=json.load\\(sys.stdin\\)['kpis']; print\\(f\\\\\"Reopened: {d['reopened_period']}\\\\\"\\)\")",
+      "Bash(wc -l /d/Project/psa-dashboard/backend/app/api/routes_*.py)",
+      "Bash(find D:Projectpsa-dashboardbackendapp -type f -name *.py)",
+      "Bash(python -c \"from app.config import get_settings; s = get_settings\\(\\); print\\(''Config OK, phone provider:'', s.phone.provider\\)\")",
+      "Bash(python -c \"from app.phone.factory import get_phone_provider; from app.config import get_settings; p = get_phone_provider\\(get_settings\\(\\)\\); print\\(''Phone provider:'', p.get_provider_name\\(\\) if p else ''None''\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(python -u -c \":*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

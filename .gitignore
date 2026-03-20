@@ -10,8 +10,8 @@ backend/.venv/
 *.egg
 
 # Database
-data/*.db
-data/*.db-journal
+**/*.db
+**/*.db-journal
 
 # Config (contains secrets)
 config.yaml
