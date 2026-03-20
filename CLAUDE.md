@@ -39,4 +39,4 @@
    npm install
    npm run dev
    ```
-4. Open http://localhost:3000 (frontend dev server proxies API to backend on :8080).
+4. Open http://localhost:3000 (frontend dev server proxies API to backend on :8880).

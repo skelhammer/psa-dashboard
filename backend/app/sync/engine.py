@@ -56,7 +56,7 @@ class SyncEngine:
             "INSERT INTO sync_log (started_at, provider_name) VALUES (?, ?)",
             (started_at.isoformat(), self.provider.get_provider_name()),
         )
-        sync_id = (await conn.execute("SELECT last_insert_rowid()")).fetchone
+        sync_id = await (await conn.execute("SELECT last_insert_rowid()")).fetchone()
         await conn.commit()
 
         try:

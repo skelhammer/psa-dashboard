@@ -34,7 +34,7 @@ if not exist node_modules (
 cd ..
 
 :: Launch backend
-echo [3/4] Starting backend on :8080...
+echo [3/4] Starting backend on :8880...
 cd backend
 start "PSA Dashboard - Backend" cmd /k ".venv\Scripts\activate && python run.py"
 cd ..
@@ -49,7 +49,7 @@ echo.
 echo =============================================
 echo   PSA Dashboard is running!
 echo   Frontend: http://localhost:3000
-echo   Backend:  http://localhost:8080
+echo   Backend:  http://localhost:8880
 echo =============================================
 echo.
 echo Close the Backend and Frontend windows to stop.
