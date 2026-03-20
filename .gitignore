@@ -1,17 +1,20 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.egg
 *.egg-info/
 dist/
 build/
 .venv/
 venv/
-backend/.venv/
-*.egg
+*.whl
 
 # Database
 **/*.db
 **/*.db-journal
+**/*.db-wal
+**/*.db-shm
 
 # Config (contains secrets)
 config.yaml
@@ -21,19 +24,34 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 
-# Claude Code
-.claude/
+# Environment
+.env
+.env.*
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
+ehthumbs.db
 
-# Environment
-.env
-.env.local
+# Claude Code
+.claude/
+
+# Logs
+*.log
+npm-debug.log*
+pip-log.txt
+
+# Testing / Coverage
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
