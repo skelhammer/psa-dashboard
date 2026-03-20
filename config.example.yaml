@@ -43,3 +43,17 @@ business_hours:
   end_hour: 17      # 5:00 PM
   work_days: [1, 2, 3, 4, 5]  # Mon=1 through Fri=5
   holidays: []       # ISO dates like ["2026-01-01", "2026-12-25"]
+
+phone:
+  provider: mock          # Options: zoom, mock, none
+  zoom:
+    account_id: YOUR_ZOOM_ACCOUNT_ID
+    client_id: YOUR_ZOOM_CLIENT_ID
+    client_secret: YOUR_ZOOM_CLIENT_SECRET
+
+phone_sync:
+  interval_minutes: 5
+  lookback_days: 30
+
+billing:
+  tech_cost_per_hour: 55  # Average fully-loaded cost per tech hour (for profitability)

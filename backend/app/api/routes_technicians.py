@@ -5,11 +5,20 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
 
 from app.api.dependencies import FilterParams
 from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
 
 router = APIRouter(prefix="/api", tags=["technicians"])
+
+# Valid dashboard roles and which are included in performance metrics
+PERFORMANCE_ROLES = {"technician"}  # Only these show up in leaderboards, alerts, utilization
+ALL_DASHBOARD_ROLES = {"technician", "administration", "executive", "sales"}
+
+
+class UpdateRoleBody(BaseModel):
+    dashboard_roles: list[str]
 
 
 @router.get("/technicians")
@@ -45,7 +54,7 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
     stale_cutoff = (now - timedelta(days=stale_days)).isoformat()
 
     techs = await conn.execute_fetchall(
-        "SELECT id, first_name, last_name, email, role, available_hours_per_week FROM technicians"
+        "SELECT id, first_name, last_name, email, role, available_hours_per_week, COALESCE(dashboard_role, 'technician') as dashboard_role FROM technicians"
     )
 
     result = []
@@ -147,6 +156,7 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
             "name": tech_name,
             "email": tech["email"],
             "role": tech["role"],
+            "dashboard_role": tech["dashboard_role"],
             "open_tickets": open_count[0][0],
             "closed_period": closed_period[0][0],
             "avg_first_response_minutes": round(avg_fr[0][0] or 0, 1),
@@ -359,12 +369,19 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
     for t in closed_list:
         t["url"] = provider.get_ticket_url(t["id"])
 
+    dashboard_role = "technician"
+    try:
+        dashboard_role = tech["dashboard_role"] or "technician"
+    except (IndexError, KeyError):
+        pass
+
     return {
         "technician": {
             "id": tech["id"],
             "name": f"{tech['first_name']} {tech['last_name']}".strip(),
             "email": tech["email"],
             "role": tech["role"],
+            "dashboard_role": dashboard_role,
         },
         "kpis": kpis,
         "volume_trend": [
@@ -386,3 +403,122 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
         "open_tickets": open_list,
         "date_range_label": filters.date_range_label,
     }
+
+
+@router.patch("/technicians/{tech_id}/role")
+async def update_dashboard_role(tech_id: str, body: UpdateRoleBody, request: Request):
+    """Update a technician's dashboard roles (supports multiple)."""
+    roles = [r.lower().strip() for r in body.dashboard_roles if r.strip()]
+    invalid = [r for r in roles if r not in ALL_DASHBOARD_ROLES]
+    if invalid:
+        return {"error": f"Invalid role(s): {', '.join(invalid)}. Must be from: {', '.join(sorted(ALL_DASHBOARD_ROLES))}"}
+    if not roles:
+        return {"error": "At least one role is required"}
+
+    db = request.app.state.db
+    conn = await db.get_connection()
+
+    existing = await conn.execute_fetchall(
+        "SELECT id FROM technicians WHERE id = ?", (tech_id,)
+    )
+    if not existing:
+        return {"error": "Technician not found"}
+
+    role_str = ",".join(sorted(set(roles)))
+    await conn.execute(
+        "UPDATE technicians SET dashboard_role = ? WHERE id = ?",
+        (role_str, tech_id),
+    )
+    await conn.commit()
+    return {"status": "updated", "technician_id": tech_id, "dashboard_role": role_str}
+
+
+@router.get("/teams")
+async def teams_list(request: Request, filters: FilterParams = Depends()):
+    """Get aggregate performance metrics grouped by tech group (team)."""
+    db = request.app.state.db
+    conn = await db.get_connection()
+
+    now = datetime.now()
+    period_start = filters.date_from.isoformat()
+    period_end = filters.date_to.isoformat() if filters.date_to else now.isoformat()
+
+    # Get all distinct tech groups
+    groups = await conn.execute_fetchall(
+        "SELECT DISTINCT COALESCE(tech_group_name, 'Unassigned') as team FROM tickets ORDER BY team"
+    )
+
+    result = []
+    for group in groups:
+        team = group["team"]
+        group_filter = "tech_group_name = ?" if team != "Unassigned" else "tech_group_name IS NULL"
+        group_param = [team] if team != "Unassigned" else []
+
+        # Ticket counts
+        open_row = await conn.execute_fetchall(
+            f"SELECT COUNT(*) FROM tickets WHERE {group_filter} AND status NOT IN {CLOSED_STATUSES_SQL}",
+            group_param,
+        )
+        closed_row = await conn.execute_fetchall(
+            f"""SELECT COUNT(*) FROM tickets WHERE {group_filter}
+                AND status IN {CLOSED_STATUSES_SQL}
+                AND resolution_time >= ? AND resolution_time <= ?""",
+            group_param + [period_start, period_end],
+        )
+        created_row = await conn.execute_fetchall(
+            f"SELECT COUNT(*) FROM tickets WHERE {group_filter} AND created_time >= ? AND created_time <= ?",
+            group_param + [period_start, period_end],
+        )
+
+        # SLA
+        sla_total = await conn.execute_fetchall(
+            f"""SELECT COUNT(*) FROM tickets WHERE {group_filter}
+                AND created_time >= ? AND created_time <= ? AND sla_name IS NOT NULL""",
+            group_param + [period_start, period_end],
+        )
+        sla_violated = await conn.execute_fetchall(
+            f"""SELECT COUNT(*) FROM tickets WHERE {group_filter}
+                AND created_time >= ? AND created_time <= ? AND sla_name IS NOT NULL
+                AND (first_response_violated = 1 OR resolution_violated = 1)""",
+            group_param + [period_start, period_end],
+        )
+        st = sla_total[0][0] or 0
+        sv = sla_violated[0][0] or 0
+        sla_pct = round(((st - sv) / st * 100) if st > 0 else 100, 1)
+
+        # Avg resolution
+        avg_res = await conn.execute_fetchall(
+            f"""SELECT AVG(resolution_business_minutes) FROM tickets
+                WHERE {group_filter} AND resolution_business_minutes > 0
+                AND created_time >= ? AND created_time <= ?""",
+            group_param + [period_start, period_end],
+        )
+
+        # Hours logged
+        worklog = await conn.execute_fetchall(
+            f"""SELECT SUM(worklog_minutes) FROM tickets
+                WHERE {group_filter} AND status IN {CLOSED_STATUSES_SQL}
+                AND resolution_time >= ? AND resolution_time <= ?""",
+            group_param + [period_start, period_end],
+        )
+        hours = round((worklog[0][0] or 0) / 60, 1)
+
+        # Member count (distinct technicians with tickets in this group)
+        members = await conn.execute_fetchall(
+            f"""SELECT COUNT(DISTINCT technician_id) FROM tickets
+                WHERE {group_filter} AND technician_id IS NOT NULL""",
+            group_param,
+        )
+
+        result.append({
+            "team": team,
+            "member_count": members[0][0] or 0,
+            "open_tickets": open_row[0][0] or 0,
+            "closed_period": closed_row[0][0] or 0,
+            "created_period": created_row[0][0] or 0,
+            "sla_compliance_pct": sla_pct,
+            "avg_resolution_minutes": round(avg_res[0][0] or 0, 1),
+            "worklog_hours": hours,
+        })
+
+    return {"teams": result, "date_range_label": filters.date_range_label}

@@ -1,13 +1,14 @@
-import { useExecutiveReport, useExecutiveCharts } from '../api/hooks'
+import { useExecutiveReport, useExecutiveCharts, useExecutiveSummary } from '../api/hooks'
 import { useFilterContext } from '../context/FilterContext'
 import { formatDuration } from '../utils/formatting'
 import { BRAND, CHART_COLORS } from '../utils/constants'
 import ChartCard from '../components/ChartCard'
 import GlobalFilters from '../components/GlobalFilters'
 import ExportButtons from '../components/ExportButtons'
+import InsightCard from '../components/InsightCard'
 import { exportMultiSectionCSV } from '../utils/export'
 import clsx from 'clsx'
-import { TrendingUp, TrendingDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, CircleCheck, AlertTriangle, CircleX } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, ComposedChart, ReferenceLine,
@@ -82,11 +83,23 @@ const slaColor = (pct: number) => {
   return 'text-red-400'
 }
 
+const healthIcons = {
+  green: CircleCheck,
+  yellow: AlertTriangle,
+  red: CircleX,
+}
+const healthColors = {
+  green: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/5',
+  yellow: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/5',
+  red: 'text-red-400 border-red-500/30 bg-red-500/5',
+}
+
 export default function ExecutiveReport() {
   const { toParams } = useFilterContext()
   const params = toParams()
   const { data: report, isLoading } = useExecutiveReport(params)
   const { data: charts } = useExecutiveCharts(params)
+  const { data: summary } = useExecutiveSummary()
 
   if (isLoading) {
     return <div className="text-gray-500">Loading executive report...</div>
@@ -140,6 +153,49 @@ export default function ExecutiveReport() {
         <ExportButtons onCSV={handleExportCSV} pageTitle="Executive Report" />
       </div>
       <GlobalFilters />
+
+      {/* CEO Summary */}
+      {summary?.health && (() => {
+        const h = summary.health
+        const color = h.health as 'green' | 'yellow' | 'red'
+        const HealthIcon = healthIcons[color] || CircleCheck
+        return (
+          <div className={clsx('rounded-xl border p-6 animate-fade-in', healthColors[color])}>
+            <div className="flex items-start gap-4">
+              <HealthIcon size={28} className="shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-base font-semibold text-gray-100">{h.summary}</p>
+                <div className="flex flex-wrap gap-6 mt-3 text-sm">
+                  <div>
+                    <span className="text-gray-400">Open Backlog: </span>
+                    <span className="font-bold text-white">{h.open_backlog}</span>
+                    <span className="text-gray-500 text-xs ml-1">(clears in ~{h.clearance_days}d)</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">SLA: </span>
+                    <span className="font-bold text-white">{h.sla_pct}%</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Close Trend: </span>
+                    <span className={clsx('font-bold', h.close_change_pct >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                      {h.close_change_pct >= 0 ? '+' : ''}{h.close_change_pct}% MoM
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Insight Cards */}
+      {summary?.insights?.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {summary.insights.map((insight: any, i: number) => (
+            <InsightCard key={i} type={insight.type} title={insight.title} description={insight.description} />
+          ))}
+        </div>
+      )}
 
       {/* KPI Scoreboard */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

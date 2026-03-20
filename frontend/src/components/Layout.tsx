@@ -2,8 +2,9 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useSyncStatus, useTriggerSync, useTriggerFullSync } from '../api/hooks'
 import {
   LayoutDashboard, Target, ListOrdered, Users, Receipt, Building2,
-  RefreshCw, RefreshCcw, Zap, FileBarChart
+  RefreshCw, RefreshCcw, Zap, FileBarChart, Phone
 } from 'lucide-react'
+import AlertBanner from './AlertBanner'
 import clsx from 'clsx'
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
   { to: '/technicians', label: 'Technicians', icon: Users },
   { to: '/billing', label: 'Billing Audit', icon: Receipt },
   { to: '/clients', label: 'Client Health', icon: Building2 },
+  { to: '/phone', label: 'Phone Analytics', icon: Phone },
 ]
 
 function timeAgo(dateStr: string): string {
@@ -134,6 +136,9 @@ export default function Layout() {
             </button>
           </div>
         </header>
+
+        {/* Alert Banner */}
+        <AlertBanner />
 
         {/* Page content */}
         <main className="flex-1 overflow-auto p-6">

@@ -239,6 +239,90 @@ async def clients_list(request: Request, filters: FilterParams = Depends()):
     return {"clients": result, "date_range_label": filters.date_range_label}
 
 
+@router.get("/clients/profitability")
+async def clients_profitability(request: Request, filters: FilterParams = Depends()):
+    """Get profitability metrics for all clients with contract values."""
+    db = request.app.state.db
+    conn = await db.get_connection()
+    settings = get_settings()
+    tech_cost = settings.billing.tech_cost_per_hour
+
+    now = _now_tz()
+    period_start = filters.date_from.isoformat()
+    period_end = filters.date_to.isoformat() if filters.date_to else now.isoformat()
+
+    # Get clients with billing config (including optional monthly_contract_value)
+    clients = await conn.execute_fetchall("""
+        SELECT c.id, c.name, bc.monthly_contract_value, bc.billing_type, bc.track_billing
+        FROM clients c
+        LEFT JOIN billing_config bc ON c.id = bc.client_id
+        WHERE c.stage = 'Active'
+        ORDER BY c.name
+    """)
+
+    result = []
+    for client in clients:
+        client_id = client["id"]
+        contract_value = client["monthly_contract_value"]
+
+        # Hours consumed in period
+        hours_row = await conn.execute_fetchall(
+            """SELECT SUM(worklog_minutes) FROM tickets
+               WHERE client_id = ? AND created_time >= ? AND created_time <= ?""",
+            [client_id, period_start, period_end],
+        )
+        hours_consumed = round((hours_row[0][0] or 0) / 60, 2)
+
+        # Ticket count
+        ticket_row = await conn.execute_fetchall(
+            """SELECT COUNT(*) FROM tickets
+               WHERE client_id = ? AND created_time >= ? AND created_time <= ?""",
+            [client_id, period_start, period_end],
+        )
+        ticket_count = ticket_row[0][0] or 0
+
+        # Calculate profitability metrics
+        service_cost = round(hours_consumed * tech_cost, 2)
+        effective_hourly_rate = None
+        gross_margin = None
+        gross_margin_pct = None
+
+        if contract_value and contract_value > 0:
+            if hours_consumed > 0:
+                effective_hourly_rate = round(contract_value / hours_consumed, 2)
+            gross_margin = round(contract_value - service_cost, 2)
+            gross_margin_pct = round((gross_margin / contract_value) * 100, 1) if contract_value > 0 else None
+
+        result.append({
+            "id": client_id,
+            "name": client["name"],
+            "billing_type": client["billing_type"] or "unknown",
+            "monthly_contract_value": contract_value,
+            "hours_consumed": hours_consumed,
+            "ticket_count": ticket_count,
+            "service_cost": service_cost,
+            "effective_hourly_rate": effective_hourly_rate,
+            "gross_margin": gross_margin,
+            "gross_margin_pct": gross_margin_pct,
+        })
+
+    # Sort by hours consumed descending (for Pareto)
+    result.sort(key=lambda c: c["hours_consumed"], reverse=True)
+
+    # Add cumulative percentage for Pareto chart
+    total_hours = sum(c["hours_consumed"] for c in result)
+    cumulative = 0
+    for c in result:
+        cumulative += c["hours_consumed"]
+        c["cumulative_hours_pct"] = round((cumulative / total_hours * 100) if total_hours > 0 else 0, 1)
+
+    return {
+        "clients": result,
+        "tech_cost_per_hour": tech_cost,
+        "date_range_label": filters.date_range_label,
+    }
+
+
 @router.get("/clients/{cid}")
 async def client_detail(cid: str, request: Request, filters: FilterParams = Depends()):
     """Get detailed view for a specific client."""

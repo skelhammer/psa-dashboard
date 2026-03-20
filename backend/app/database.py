@@ -149,12 +149,102 @@ CREATE INDEX IF NOT EXISTS idx_tickets_priority ON tickets(priority);
 CREATE INDEX IF NOT EXISTS idx_billing_flags_ticket_id ON billing_flags(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_billing_flags_resolved ON billing_flags(resolved);
 CREATE INDEX IF NOT EXISTS idx_client_contracts_client_id ON client_contracts(client_id);
+
+-- Phone integration tables
+CREATE TABLE IF NOT EXISTS phone_calls (
+    id TEXT PRIMARY KEY,
+    direction TEXT,
+    caller_number TEXT,
+    caller_name TEXT,
+    callee_number TEXT,
+    callee_name TEXT,
+    start_time TEXT,
+    answer_time TEXT,
+    end_time TEXT,
+    duration INTEGER,
+    wait_time INTEGER,
+    hold_time INTEGER,
+    result TEXT,
+    user_id TEXT,
+    user_email TEXT,
+    queue_id TEXT,
+    queue_name TEXT,
+    has_recording INTEGER DEFAULT 0,
+    has_voicemail INTEGER DEFAULT 0,
+    matched_client_id TEXT,
+    matched_ticket_id TEXT,
+    synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS phone_users (
+    id TEXT PRIMARY KEY,
+    email TEXT,
+    name TEXT,
+    extension TEXT,
+    department TEXT,
+    status TEXT,
+    synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS phone_queues (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    extension TEXT,
+    member_count INTEGER,
+    synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS phone_agent_daily (
+    date TEXT,
+    user_id TEXT,
+    user_email TEXT,
+    total_calls INTEGER DEFAULT 0,
+    inbound_calls INTEGER DEFAULT 0,
+    outbound_calls INTEGER DEFAULT 0,
+    answered_calls INTEGER DEFAULT 0,
+    missed_calls INTEGER DEFAULT 0,
+    voicemail_calls INTEGER DEFAULT 0,
+    total_talk_seconds INTEGER DEFAULT 0,
+    total_wait_seconds INTEGER DEFAULT 0,
+    total_hold_seconds INTEGER DEFAULT 0,
+    avg_handle_seconds INTEGER DEFAULT 0,
+    PRIMARY KEY (date, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_phone_calls_start_time ON phone_calls(start_time);
+CREATE INDEX IF NOT EXISTS idx_phone_calls_user_id ON phone_calls(user_id);
+CREATE INDEX IF NOT EXISTS idx_phone_calls_queue_id ON phone_calls(queue_id);
+CREATE INDEX IF NOT EXISTS idx_phone_calls_result ON phone_calls(result);
+CREATE INDEX IF NOT EXISTS idx_phone_agent_daily_date ON phone_agent_daily(date);
+
+-- Alerts and metric snapshots
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'info',
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    entity_type TEXT,
+    entity_id TEXT,
+    created_at TEXT NOT NULL,
+    acknowledged_at TEXT,
+    resolved_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS metric_snapshots (
+    date TEXT,
+    metric_name TEXT,
+    value REAL,
+    PRIMARY KEY (date, metric_name)
+);
 """
 
 
 MIGRATIONS = [
     "ALTER TABLE tickets ADD COLUMN first_response_business_minutes REAL",
     "ALTER TABLE tickets ADD COLUMN resolution_business_minutes REAL",
+    "ALTER TABLE billing_config ADD COLUMN monthly_contract_value REAL",
+    "ALTER TABLE technicians ADD COLUMN dashboard_role TEXT NOT NULL DEFAULT 'technician'",
 ]
 
 

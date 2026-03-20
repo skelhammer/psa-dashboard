@@ -444,9 +444,15 @@ class SyncEngine:
 
     async def _sync_technicians(self, conn: aiosqlite.Connection, techs: list[Technician]):
         for tech in techs:
+            # Use INSERT ... ON CONFLICT to preserve dashboard_role set by the user
             await conn.execute(
-                """INSERT OR REPLACE INTO technicians (id, first_name, last_name, email, role)
-                   VALUES (?, ?, ?, ?, ?)""",
+                """INSERT INTO technicians (id, first_name, last_name, email, role)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                       first_name = excluded.first_name,
+                       last_name = excluded.last_name,
+                       email = excluded.email,
+                       role = excluded.role""",
                 (tech.id, tech.first_name, tech.last_name, tech.email, tech.role),
             )
 

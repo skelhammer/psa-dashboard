@@ -151,6 +151,83 @@ export function useExecutiveCharts(params?: Record<string, string>) {
   })
 }
 
+// Phone Analytics
+export function usePhoneOverview(days: number = 30) {
+  return useQuery({
+    queryKey: ['phone-overview', days],
+    queryFn: () => api.get('/phone/overview', { params: { days } }).then(r => r.data),
+  })
+}
+
+export function usePhoneCharts(days: number = 30) {
+  return useQuery({
+    queryKey: ['phone-charts', days],
+    queryFn: () => api.get('/phone/charts', { params: { days } }).then(r => r.data),
+  })
+}
+
+export function usePhoneAgents(days: number = 30) {
+  return useQuery({
+    queryKey: ['phone-agents', days],
+    queryFn: () => api.get('/phone/agents', { params: { days } }).then(r => r.data),
+  })
+}
+
+export function usePhoneQueues(days: number = 30) {
+  return useQuery({
+    queryKey: ['phone-queues', days],
+    queryFn: () => api.get('/phone/queues', { params: { days } }).then(r => r.data),
+  })
+}
+
+// Alerts
+export function useAlerts() {
+  return useQuery({
+    queryKey: ['alerts'],
+    queryFn: () => api.get('/alerts/active').then(r => r.data),
+    refetchInterval: 60_000,
+  })
+}
+
+// Executive Summary (CEO)
+export function useExecutiveSummary() {
+  return useQuery({
+    queryKey: ['executive-summary'],
+    queryFn: () => api.get('/executive/summary').then(r => r.data),
+  })
+}
+
+// Client Profitability
+export function useClientProfitability(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['client-profitability', params],
+    queryFn: () => api.get('/clients/profitability', { params }).then(r => r.data),
+  })
+}
+
+// Teams
+export function useTeams(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['teams', params],
+    queryFn: () => api.get('/teams', { params }).then(r => r.data),
+  })
+}
+
+// Update technician dashboard role
+export function useUpdateTechRole() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ techId, dashboard_roles }: { techId: string; dashboard_roles: string[] }) =>
+      api.patch(`/technicians/${techId}/role`, { dashboard_roles }).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['technicians'] })
+      qc.invalidateQueries({ queryKey: ['teams'] })
+      qc.invalidateQueries({ queryKey: ['alerts'] })
+      qc.invalidateQueries({ queryKey: ['executive-summary'] })
+    },
+  })
+}
+
 export function useResolveFlag() {
   const qc = useQueryClient()
   return useMutation({

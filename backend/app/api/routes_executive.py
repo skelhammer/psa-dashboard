@@ -216,9 +216,9 @@ async def executive_report(request: Request, filters: FilterParams = Depends()):
     )
     current["unresolved_billing_flags"] = flags[0][0] or 0
 
-    # Team utilization
+    # Team utilization (only technician-role techs)
     techs = await conn.execute_fetchall(
-        "SELECT available_hours_per_week FROM technicians"
+        "SELECT available_hours_per_week FROM technicians WHERE COALESCE(dashboard_role, 'technician') LIKE '%technician%'"
     )
     if techs:
         weeks_in_period = max((end - start).days / 7, 1)
@@ -350,9 +350,9 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
             "open_count": open_row[0][0] or 0,
         })
 
-    # Team performance summary (selected period)
+    # Team performance summary (only technician-role techs)
     tech_rows = await conn.execute_fetchall(
-        "SELECT id, first_name, last_name, available_hours_per_week FROM technicians"
+        "SELECT id, first_name, last_name, available_hours_per_week FROM technicians WHERE COALESCE(dashboard_role, 'technician') LIKE '%technician%'"
     )
     team_summary = []
     weeks_in_period = max((end - start).days / 7, 1)

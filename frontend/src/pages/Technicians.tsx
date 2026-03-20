@@ -1,12 +1,92 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTechnicians } from '../api/hooks'
+import { useTechnicians, useTeams, useUpdateTechRole } from '../api/hooks'
 import { useFilterContext } from '../context/FilterContext'
 import { formatDuration } from '../utils/formatting'
 import GlobalFilters from '../components/GlobalFilters'
 import ExportButtons from '../components/ExportButtons'
 import { Trophy } from 'lucide-react'
 import clsx from 'clsx'
+
+const DASHBOARD_ROLES = ['technician', 'administration', 'executive', 'sales'] as const
+const ROLE_COLORS: Record<string, string> = {
+  technician: 'text-blue-400 bg-blue-400/10 border-blue-400/30',
+  administration: 'text-purple-400 bg-purple-400/10 border-purple-400/30',
+  executive: 'text-amber-400 bg-amber-400/10 border-amber-400/30',
+  sales: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/30',
+}
+
+function RolePicker({ roles, onChange }: { roles: string[]; onChange: (roles: string[]) => void }) {
+  const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+
+  const toggle = (role: string) => {
+    const current = new Set(roles)
+    if (current.has(role)) {
+      if (current.size > 1) current.delete(role)
+    } else {
+      current.add(role)
+    }
+    onChange(Array.from(current))
+  }
+
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setOpen(!open)
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={handleOpen}
+        className="flex flex-wrap gap-1"
+      >
+        {roles.map(r => (
+          <span
+            key={r}
+            className={clsx(
+              'px-1.5 py-0 rounded-full text-[10px] font-bold border',
+              ROLE_COLORS[r] || ROLE_COLORS.technician,
+            )}
+          >
+            {r}
+          </span>
+        ))}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-50 bg-[#1a1a1e] border border-white/[0.12] rounded-lg shadow-xl py-1 min-w-[160px]"
+            style={{ top: pos.top, left: pos.left }}
+          >
+            {DASHBOARD_ROLES.map(r => (
+              <label
+                key={r}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/[0.05] cursor-pointer text-xs"
+              >
+                <input
+                  type="checkbox"
+                  checked={roles.includes(r)}
+                  onChange={() => toggle(r)}
+                  className="accent-blue-500 rounded"
+                />
+                <span className={clsx('font-medium', ROLE_COLORS[r]?.split(' ')[0] || 'text-gray-300')}>
+                  {r}
+                </span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
 
 function utilizationColor(pct: number): string {
   if (pct >= 60 && pct <= 80) return 'text-green-400'
@@ -108,8 +188,10 @@ export default function Technicians() {
   const { toParams } = useFilterContext()
   const params = toParams()
   const { data, isLoading } = useTechnicians(params)
+  const { data: teamsData } = useTeams(params)
+  const updateRole = useUpdateTechRole()
   const navigate = useNavigate()
-  const [viewMode, setViewMode] = useState<'table' | 'leaderboard'>('table')
+  const [viewMode, setViewMode] = useState<'table' | 'leaderboard' | 'teams'>('table')
   const [leaderboardMetric, setLeaderboardMetric] = useState<LeaderboardMetric>('productivity')
   const [sortCol, setSortCol] = useState<string>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -117,6 +199,7 @@ export default function Technicians() {
   if (isLoading) return <div className="text-gray-500">Loading...</div>
 
   const techs = data?.technicians || []
+  const teams = teamsData?.teams || []
   const periodLabel = data?.date_range_label || ''
 
   const techCsvData = techs.map((t: any) => ({
@@ -153,6 +236,7 @@ export default function Technicians() {
 
   const columns = [
     { key: 'name', label: 'Name', type: 'string' },
+    { key: 'dashboard_role', label: 'Role', type: 'string' },
     { key: 'open_tickets', label: 'Open', type: 'number' },
     { key: 'closed_period', label: 'Closed', type: 'number' },
     { key: 'avg_first_response_minutes', label: 'Avg FR', type: 'number' },
@@ -206,6 +290,17 @@ export default function Technicians() {
             >
               Leaderboard
             </button>
+            <button
+              onClick={() => setViewMode('teams')}
+              className={clsx(
+                'px-3 py-1.5 text-sm rounded-md transition-colors',
+                viewMode === 'teams'
+                  ? 'bg-brand-primary/20 text-brand-primary-light font-medium'
+                  : 'text-gray-400 hover:text-gray-200'
+              )}
+            >
+              Teams
+            </button>
           </div>
           <ExportButtons
             csvData={techCsvData}
@@ -246,7 +341,7 @@ export default function Technicians() {
         </div>
       )}
 
-      {viewMode === 'table' ? (
+      {viewMode === 'table' && (
         <div className="overflow-x-auto rounded-xl border border-white/[0.08] shadow-lg shadow-black/20">
           <table className="w-full text-sm">
             <thead>
@@ -276,11 +371,16 @@ export default function Technicians() {
               {sortedTableTechs.map((tech: any) => (
                 <tr
                   key={tech.id}
-                  onClick={() => navigate(`/technicians/${tech.id}`)}
                   className="hover:bg-zinc-800/30 transition-colors cursor-pointer"
                 >
-                  <td className="px-3 py-2.5 font-medium text-brand-primary-light">{tech.name}</td>
-                  <td className="px-3 py-2.5 tabular-nums">{tech.open_tickets}</td>
+                  <td className="px-3 py-2.5 font-medium text-brand-primary-light" onClick={() => navigate(`/technicians/${tech.id}`)}>{tech.name}</td>
+                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                    <RolePicker
+                      roles={(tech.dashboard_role || 'technician').split(',').map((r: string) => r.trim())}
+                      onChange={roles => updateRole.mutate({ techId: tech.id, dashboard_roles: roles })}
+                    />
+                  </td>
+                  <td className="px-3 py-2.5 tabular-nums" onClick={() => navigate(`/technicians/${tech.id}`)}>{tech.open_tickets}</td>
                   <td className="px-3 py-2.5 tabular-nums">{tech.closed_period}</td>
                   <td className="px-3 py-2.5 tabular-nums text-xs">{formatDuration(tech.avg_first_response_minutes)}</td>
                   <td className="px-3 py-2.5 tabular-nums text-xs">{formatDuration(tech.avg_resolution_minutes)}</td>
@@ -314,7 +414,9 @@ export default function Technicians() {
             </tbody>
           </table>
         </div>
-      ) : (
+      )}
+
+      {viewMode === 'leaderboard' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sortedTechs.map((tech: any, idx: number) => {
             const rank = idx + 1
@@ -376,6 +478,41 @@ export default function Technicians() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {viewMode === 'teams' && (
+        <div className="overflow-x-auto rounded-xl border border-white/[0.08] shadow-lg shadow-black/20">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#111113] border-b border-white/[0.08]">
+                {['Team', 'Members', 'Open', 'Created', 'Closed', 'SLA %', 'Avg Resolution', 'Hours'].map(h => (
+                  <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800/50">
+              {teams.map((team: any) => (
+                <tr key={team.team} className="hover:bg-zinc-800/30 transition-colors">
+                  <td className="px-3 py-2.5 font-medium text-brand-primary-light">{team.team}</td>
+                  <td className="px-3 py-2.5 tabular-nums">{team.member_count}</td>
+                  <td className="px-3 py-2.5 tabular-nums">{team.open_tickets}</td>
+                  <td className="px-3 py-2.5 tabular-nums">{team.created_period}</td>
+                  <td className="px-3 py-2.5 tabular-nums">{team.closed_period}</td>
+                  <td className="px-3 py-2.5 tabular-nums">
+                    <span className={clsx(
+                      team.sla_compliance_pct >= 95 ? 'text-green-400' :
+                      team.sla_compliance_pct >= 80 ? 'text-yellow-400' : 'text-red-400'
+                    )}>
+                      {team.sla_compliance_pct}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 tabular-nums text-xs">{formatDuration(team.avg_resolution_minutes)}</td>
+                  <td className="px-3 py-2.5 tabular-nums">{team.worklog_hours}h</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

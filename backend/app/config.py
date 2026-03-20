@@ -51,6 +51,7 @@ class ServerConfig:
 class BillingConfig:
     hourly_plans: list[str] = field(default_factory=list)
     unlimited_plans: list[str] = field(default_factory=list)
+    tech_cost_per_hour: float = 55.0
 
 
 @dataclass
@@ -72,6 +73,25 @@ class BusinessHoursConfig:
 
 
 @dataclass
+class ZoomPhoneConfig:
+    account_id: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+
+
+@dataclass
+class PhoneConfig:
+    provider: str = "none"
+    zoom: ZoomPhoneConfig = field(default_factory=ZoomPhoneConfig)
+
+
+@dataclass
+class PhoneSyncConfig:
+    interval_minutes: int = 5
+    lookback_days: int = 30
+
+
+@dataclass
 class Settings:
     psa: PSAConfig = field(default_factory=PSAConfig)
     sync: SyncConfig = field(default_factory=SyncConfig)
@@ -80,6 +100,8 @@ class Settings:
     billing: BillingConfig = field(default_factory=BillingConfig)
     thresholds: ThresholdsConfig = field(default_factory=ThresholdsConfig)
     business_hours: BusinessHoursConfig = field(default_factory=BusinessHoursConfig)
+    phone: PhoneConfig = field(default_factory=PhoneConfig)
+    phone_sync: PhoneSyncConfig = field(default_factory=PhoneSyncConfig)
 
     @property
     def db_path(self) -> Path:
@@ -126,6 +148,13 @@ def load_settings(config_path: Path | None = None) -> Settings:
     billing = BillingConfig(
         hourly_plans=billing_raw.get("hourly_plans", []),
         unlimited_plans=billing_raw.get("unlimited_plans", []),
+        tech_cost_per_hour=float(billing_raw.get("tech_cost_per_hour", 55)),
+    )
+
+    phone_raw = raw.get("phone", {})
+    phone = PhoneConfig(
+        provider=phone_raw.get("provider", "none"),
+        zoom=_build_nested(ZoomPhoneConfig, phone_raw.get("zoom")),
     )
 
     return Settings(
@@ -136,6 +165,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
         billing=billing,
         thresholds=_build_nested(ThresholdsConfig, raw.get("thresholds")),
         business_hours=_build_nested(BusinessHoursConfig, raw.get("business_hours")),
+        phone=phone,
+        phone_sync=_build_nested(PhoneSyncConfig, raw.get("phone_sync")),
     )
 
 
