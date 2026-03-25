@@ -167,8 +167,12 @@ async def billing_summary(request: Request, filters: FilterParams = Depends()):
             client_date_cond += " AND resolution_time <= ?"
             client_date_params.append(period_end)
 
+        # Exclude tickets that have a resolved billing flag (already addressed)
+        resolved_flag_exclude = """AND id NOT IN (
+            SELECT ticket_id FROM billing_flags WHERE resolved = 1 AND flag_type = 'MISSING_WORKLOG'
+        )"""
         total = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond}",
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond} {resolved_flag_exclude}",
             [cid, *client_date_params],
         )
         with_time = await conn.execute_fetchall(
