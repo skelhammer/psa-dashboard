@@ -164,10 +164,10 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
 
         for ticket in tickets:
             ticket_id = ticket[0]
-            # Check if flag already exists and is unresolved
+            # Check if flag already exists (resolved or not)
             existing = await conn.execute_fetchall(
                 """SELECT id FROM billing_flags
-                   WHERE ticket_id = ? AND flag_type = 'MISSING_WORKLOG' AND resolved = 0""",
+                   WHERE ticket_id = ? AND flag_type = 'MISSING_WORKLOG'""",
                 (ticket_id,),
             )
             if not existing:
@@ -194,7 +194,7 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
                 logged = ticket[2]
                 existing = await conn.execute_fetchall(
                     """SELECT id FROM billing_flags
-                       WHERE ticket_id = ? AND flag_type = 'LOW_TIME' AND resolved = 0""",
+                       WHERE ticket_id = ? AND flag_type = 'LOW_TIME'""",
                     (ticket_id,),
                 )
                 if not existing:
