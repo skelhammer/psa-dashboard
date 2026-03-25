@@ -49,7 +49,6 @@ class ServerConfig:
 
 @dataclass
 class BillingConfig:
-    hourly_plans: list[str] = field(default_factory=list)
     unlimited_plans: list[str] = field(default_factory=list)
     tech_cost_per_hour: float = 55.0
 
@@ -146,7 +145,6 @@ def load_settings(config_path: Path | None = None) -> Settings:
 
     billing_raw = raw.get("billing", {})
     billing = BillingConfig(
-        hourly_plans=billing_raw.get("hourly_plans", []),
         unlimited_plans=billing_raw.get("unlimited_plans", []),
         tech_cost_per_hour=float(billing_raw.get("tech_cost_per_hour", 55)),
     )

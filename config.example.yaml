@@ -23,11 +23,9 @@ server:
   closed_statuses: ["Resolved", "Closed"]  # Ticket statuses considered terminal/closed
 
 billing:
-  hourly_plans: []  # Deprecated; kept for backwards compatibility. No longer used.
   unlimited_plans: []
-  # Whitelist of contract names for unlimited/managed clients.
-  # Clients with an active contract matching these names are excluded from billing.
-  # All other active clients are treated as hourly (billable).
+  # All active clients are treated as hourly (billable) by default.
+  # Clients with a contract name or plan field matching these names are excluded.
   # Example: unlimited_plans: ["Managed Plan A", "Managed Plan B"]
   tech_cost_per_hour: 55  # Average fully-loaded cost per tech hour (for profitability)
 

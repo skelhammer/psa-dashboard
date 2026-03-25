@@ -43,8 +43,9 @@ async def backfill_resolution_time(conn: aiosqlite.Connection):
 async def sync_billing_config(conn: aiosqlite.Connection):
     """Auto-create/update billing_config for clients based on contract whitelist.
 
-    Whitelist approach: clients with an active contract matching unlimited_plans
-    are excluded from billing. All other active clients are treated as hourly.
+    All active clients are treated as hourly (billable) by default. Clients with
+    an active contract name or client plan field matching unlimited_plans are
+    excluded from billing.
 
     Only updates entries where auto_detected = true (never overwrites manual overrides).
     """
@@ -53,17 +54,31 @@ async def sync_billing_config(conn: aiosqlite.Connection):
     unlimited_plans = settings.billing.unlimited_plans
     now = datetime.now().isoformat()
 
-    # Build set of client IDs on unlimited plans (whitelist)
+    # Build set of client IDs on unlimited plans
     excluded_ids: set[str] = set()
     if unlimited_plans:
         placeholders = ",".join("?" for _ in unlimited_plans)
-        excluded_rows = await conn.execute_fetchall(
+
+        # Check contract_name first
+        contract_rows = await conn.execute_fetchall(
             f"""SELECT DISTINCT client_id FROM client_contracts
                 WHERE status = 'active' AND contract_name IN ({placeholders})""",
             unlimited_plans,
         )
-        excluded_ids = {row[0] for row in excluded_rows}
-        logger.info("Billing exclusion: %d clients with unlimited plan contracts", len(excluded_ids))
+        excluded_ids.update(row[0] for row in contract_rows)
+
+        # Fall back to clients.plan custom field for clients not already excluded
+        plan_rows = await conn.execute_fetchall(
+            f"""SELECT id FROM clients
+                WHERE stage = 'Active' AND plan IN ({placeholders})""",
+            unlimited_plans,
+        )
+        excluded_ids.update(row[0] for row in plan_rows)
+
+        logger.info(
+            "Billing exclusion: %d clients on unlimited plans (%d by contract, %d by plan field)",
+            len(excluded_ids), len(contract_rows), len(plan_rows),
+        )
 
     # Remove auto-detected billing config for excluded clients
     if excluded_ids:
