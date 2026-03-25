@@ -355,6 +355,21 @@ class SuperOpsProvider(PSAProvider):
 
         extra_input["sort"] = [{"attribute": "updatedTime", "order": "DESC"}]
 
+        if filters.ticket_ids:
+            id_condition = {
+                "attribute": "ticketId",
+                "operator": "includes",
+                "value": filters.ticket_ids,
+            }
+            if "condition" in extra_input:
+                existing = extra_input["condition"]
+                extra_input["condition"] = {
+                    "joinOperator": "AND",
+                    "operands": [existing, id_condition],
+                }
+            else:
+                extra_input["condition"] = id_condition
+
         if filters.updated_since:
             # Convert local time back to UTC for SuperOps API
             local_tz = _get_local_tz()

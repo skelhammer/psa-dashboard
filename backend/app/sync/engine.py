@@ -170,6 +170,14 @@ class SyncEngine:
             tickets_synced, _ = await self._sync_all_tickets(conn, updated_since=self._last_sync_time)
             await conn.commit()
 
+            # Re-fetch tickets with open billing flags to catch worklog updates
+            # that don't bump updatedTime in the PSA
+            try:
+                tickets_synced += await self._refresh_flagged_tickets(conn)
+                await conn.commit()
+            except Exception as e:
+                logger.warning("Flagged ticket refresh failed (non-fatal): %s", e)
+
             # Prune open tickets that were deleted/trashed in PSA
             try:
                 pruned = await self._prune_deleted_open_tickets(conn)
@@ -317,6 +325,38 @@ class SyncEngine:
                         len(missing), [m for m in list(missing)[:10]])
 
         return len(missing)
+
+    async def _refresh_flagged_tickets(self, conn: aiosqlite.Connection) -> int:
+        """Re-fetch tickets with open billing flags to catch worklog updates.
+
+        Some PSA providers don't update a ticket's updatedTime when worklogs
+        are added, so incremental syncs miss the change. This re-fetches only
+        the small set of flagged tickets to keep billing flags accurate.
+        """
+        flagged = await conn.execute_fetchall(
+            """SELECT DISTINCT t.id
+               FROM billing_flags bf
+               JOIN tickets t ON t.id = bf.ticket_id
+               WHERE bf.resolved = 0"""
+        )
+        if not flagged:
+            return 0
+
+        ticket_ids = [row[0] for row in flagged]
+        logger.info("Refreshing %d tickets with open billing flags", len(ticket_ids))
+
+        # Fetch each flagged ticket individually by ID condition
+        refreshed = 0
+        for ticket_id in ticket_ids:
+            filters = TicketFilter(page=1, page_size=1, ticket_ids=[ticket_id])
+            result = await self.provider.get_tickets(filters)
+            for ticket in result.items:
+                await self._upsert_ticket(conn, ticket)
+                refreshed += 1
+
+        if refreshed:
+            logger.info("Refreshed %d flagged tickets", refreshed)
+        return refreshed
 
     async def _upsert_ticket(self, conn: aiosqlite.Connection, ticket: Ticket):
         """Insert or update a ticket in the database."""

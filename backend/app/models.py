@@ -121,6 +121,7 @@ class TicketFilter:
     updated_since: datetime | None = None
     client_id: str | None = None
     technician_id: str | None = None
+    ticket_ids: list[str] | None = None
     page: int = 1
     page_size: int = 100
 

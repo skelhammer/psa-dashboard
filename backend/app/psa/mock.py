@@ -177,6 +177,8 @@ class MockProvider(PSAProvider):
             tickets = [t for t in tickets if t.client_id == filters.client_id]
         if filters.technician_id:
             tickets = [t for t in tickets if t.technician_id == filters.technician_id]
+        if filters.ticket_ids:
+            tickets = [t for t in tickets if t.id in filters.ticket_ids]
         if filters.updated_since:
             tickets = [t for t in tickets if t.updated_time >= filters.updated_since]
 
