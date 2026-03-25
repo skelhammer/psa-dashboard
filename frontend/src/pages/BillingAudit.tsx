@@ -5,7 +5,10 @@ import KpiCard from '../components/KpiCard'
 import GlobalFilters from '../components/GlobalFilters'
 import ExportButtons from '../components/ExportButtons'
 import clsx from 'clsx'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { PRIORITY_COLORS } from '../utils/constants'
+
+type SortDir = 'asc' | 'desc'
 
 const FLAG_TYPE_COLORS: Record<string, string> = {
   MISSING_WORKLOG: 'text-red-400 bg-red-400/10 border-red-400/30',
@@ -22,6 +25,8 @@ export default function BillingAudit() {
   const [flagType, setFlagType] = useState('')
   const [resolveId, setResolveId] = useState<number | null>(null)
   const [resolveNote, setResolveNote] = useState('')
+  const [clientSortKey, setClientSortKey] = useState('unresolved_flags')
+  const [clientSortDir, setClientSortDir] = useState<SortDir>('desc')
 
   const flagParams: Record<string, string> = { ...globalParams }
   if (showResolved) flagParams.resolved = 'true'
@@ -221,7 +226,39 @@ export default function BillingAudit() {
       )}
 
       {/* Billable Clients Summary */}
-      {summary?.clients?.length > 0 && (
+      {summary?.clients?.length > 0 && (() => {
+        const clientColumns = [
+          { key: 'name', label: 'Client' },
+          { key: 'billing_type', label: 'Type' },
+          { key: 'auto_detected', label: 'Source' },
+          { key: 'total_tickets', label: 'Tickets' },
+          { key: 'tickets_with_time', label: 'With Time' },
+          { key: 'tickets_missing_time', label: 'Missing' },
+          { key: 'missing_pct', label: 'Missing %' },
+          { key: 'billed_hours', label: 'Hours' },
+          { key: 'unresolved_flags', label: 'Flags' },
+        ]
+
+        const handleClientSort = (key: string) => {
+          if (clientSortKey === key) {
+            setClientSortDir(d => d === 'asc' ? 'desc' : 'asc')
+          } else {
+            setClientSortKey(key)
+            setClientSortDir(key === 'name' ? 'asc' : 'desc')
+          }
+        }
+
+        const sortedClients = [...summary.clients].sort((a: any, b: any) => {
+          let aVal = a[clientSortKey] ?? ''
+          let bVal = b[clientSortKey] ?? ''
+          if (typeof aVal === 'string') {
+            const cmp = aVal.localeCompare(bVal)
+            return clientSortDir === 'asc' ? cmp : -cmp
+          }
+          return clientSortDir === 'asc' ? aVal - bVal : bVal - aVal
+        })
+
+        return (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Billable Clients</h3>
@@ -256,13 +293,26 @@ export default function BillingAudit() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[#111113] border-b border-white/[0.08]">
-                  {['Client', 'Type', 'Source', 'Tickets', 'With Time', 'Missing', 'Missing %', 'Hours', 'Flags'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                  {clientColumns.map(col => (
+                    <th
+                      key={col.key}
+                      onClick={() => handleClientSort(col.key)}
+                      className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap cursor-pointer hover:text-gray-300 select-none transition-colors"
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {col.label}
+                        {clientSortKey === col.key && (
+                          clientSortDir === 'asc'
+                            ? <ChevronUp size={12} className="text-brand-primary" />
+                            : <ChevronDown size={12} className="text-brand-primary" />
+                        )}
+                      </span>
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/50">
-                {summary.clients.map((c: any) => (
+                {sortedClients.map((c: any) => (
                   <tr key={c.client_id} className="hover:bg-zinc-800/30">
                     <td className="px-3 py-2.5 font-medium">{c.name}</td>
                     <td className="px-3 py-2.5 text-xs">{c.billing_type}</td>
@@ -292,7 +342,8 @@ export default function BillingAudit() {
             </table>
           </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
