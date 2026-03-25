@@ -150,8 +150,7 @@ sudo bash install.sh
 
 This will:
 - Install Python 3, Node.js 22, and nginx
-- Create a `psa-dashboard` system user
-- Copy the app to `/opt/psa-dashboard`
+- Set up the Python venv and install dependencies
 - Build the frontend for production
 - Create a `psa-dashboard` systemd service for the backend
 - Configure nginx to serve the frontend and proxy API requests
@@ -167,10 +166,10 @@ sudo systemctl stop psa-dashboard      # stop the backend
 journalctl -u psa-dashboard -f         # tail logs
 ```
 
-**Configuration** lives at `/opt/psa-dashboard/config.yaml`. Edit it and restart the service to apply changes:
+**Configuration** lives at `config.yaml` in the repo directory. Edit it and restart the service to apply changes:
 
 ```bash
-sudo nano /opt/psa-dashboard/config.yaml
+nano config.yaml
 sudo systemctl restart psa-dashboard
 ```
 

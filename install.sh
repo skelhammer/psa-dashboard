@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # PSA Dashboard - Ubuntu Install Script
-# Installs the app under /opt/psa-dashboard and creates systemd services.
-# Run as root or with sudo.
+# Sets up the app as a systemd service with nginx from the current repo directory.
+# Run as root or with sudo from the repo root.
 set -euo pipefail
 
-APP_DIR="/opt/psa-dashboard"
-APP_USER="psa-dashboard"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+APP_DIR="$SCRIPT_DIR"
+APP_USER="$(stat -c '%U' "$APP_DIR")"
 NODE_MAJOR=22
 
 # ---------- pre-flight ----------
@@ -20,7 +21,7 @@ echo "============================================="
 echo
 
 # ---------- system packages ----------
-echo "[1/7] Installing system dependencies..."
+echo "[1/6] Installing system dependencies..."
 apt-get update -qq
 apt-get install -y -qq python3 python3-venv python3-pip curl ca-certificates gnupg nginx >/dev/null
 
@@ -39,23 +40,8 @@ fi
 echo "       Python: $(python3 --version)"
 echo "       Node:   $(node --version)"
 
-# ---------- app user ----------
-echo "[2/7] Creating service account..."
-if ! id "$APP_USER" &>/dev/null; then
-    useradd --system --shell /usr/sbin/nologin --home-dir "$APP_DIR" "$APP_USER"
-fi
-
-# ---------- copy files ----------
-echo "[3/7] Copying application to ${APP_DIR}..."
-mkdir -p "$APP_DIR"
-# Copy everything except .git, node_modules, .venv, __pycache__
-rsync -a --delete \
-    --exclude='.git' \
-    --exclude='node_modules' \
-    --exclude='.venv' \
-    --exclude='__pycache__' \
-    --exclude='config.yaml' \
-    "$(dirname "$(readlink -f "$0")")/" "$APP_DIR/"
+# ---------- app directory ----------
+echo "[2/6] Preparing application directory (${APP_DIR})..."
 
 # Ensure config.yaml exists
 if [[ ! -f "$APP_DIR/config.yaml" ]]; then
@@ -66,24 +52,23 @@ fi
 
 # Ensure data directory exists for SQLite
 mkdir -p "$APP_DIR/backend/data"
-
-chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+chown -R "$APP_USER":"$APP_USER" "$APP_DIR/backend/data"
 
 # ---------- backend venv ----------
-echo "[4/7] Setting up Python virtual environment..."
+echo "[3/6] Setting up Python virtual environment..."
 sudo -u "$APP_USER" python3 -m venv "$APP_DIR/backend/.venv"
 sudo -u "$APP_USER" "$APP_DIR/backend/.venv/bin/pip" install --upgrade pip -q 2>/dev/null
 sudo -u "$APP_USER" "$APP_DIR/backend/.venv/bin/pip" install -r "$APP_DIR/backend/requirements.txt" -q 2>/dev/null
 
 # ---------- frontend build ----------
-echo "[5/7] Building frontend for production..."
+echo "[4/6] Building frontend for production..."
 cd "$APP_DIR/frontend"
 sudo -u "$APP_USER" npm install --no-fund --no-audit 2>/dev/null
 sudo -u "$APP_USER" npm run build 2>/dev/null
 echo "       Frontend built to ${APP_DIR}/frontend/dist"
 
 # ---------- systemd service ----------
-echo "[6/7] Creating systemd service..."
+echo "[5/6] Creating systemd service..."
 cat > /etc/systemd/system/psa-dashboard.service <<EOF
 [Unit]
 Description=PSA Dashboard Backend
@@ -107,7 +92,7 @@ systemctl daemon-reload
 systemctl enable psa-dashboard.service
 
 # ---------- nginx ----------
-echo "[7/7] Configuring nginx..."
+echo "[6/6] Configuring nginx..."
 cat > /etc/nginx/sites-available/psa-dashboard <<EOF
 server {
     listen 80 default_server;
@@ -144,12 +129,15 @@ systemctl restart nginx
 # ---------- start ----------
 systemctl start psa-dashboard.service
 
+# Detect server IP for display
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
 echo
 echo "============================================="
 echo "  Installation complete!"
 echo "============================================="
 echo
-echo "  Dashboard:  http://<your-server-ip>"
+echo "  Dashboard:  http://${SERVER_IP}"
 echo "  Backend:    http://127.0.0.1:8880 (proxied via nginx)"
 echo
 echo "  Config:     ${APP_DIR}/config.yaml"
