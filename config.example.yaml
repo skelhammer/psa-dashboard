@@ -28,7 +28,8 @@ billing:
   # Whitelist of contract names for unlimited/managed clients.
   # Clients with an active contract matching these names are excluded from billing.
   # All other active clients are treated as hourly (billable).
-  # Example: unlimited_plans: ["MSP Platinum", "MSP Premium"]
+  # Example: unlimited_plans: ["Managed Plan A", "Managed Plan B"]
+  tech_cost_per_hour: 55  # Average fully-loaded cost per tech hour (for profitability)
 
 thresholds:
   stale_ticket_days: 3
@@ -54,6 +55,3 @@ phone:
 phone_sync:
   interval_minutes: 5
   lookback_days: 30
-
-billing:
-  tech_cost_per_hour: 55  # Average fully-loaded cost per tech hour (for profitability)

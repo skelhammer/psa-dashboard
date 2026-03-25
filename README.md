@@ -76,7 +76,7 @@ server:
   timezone: America/Los_Angeles  # Your IANA timezone
 
 billing:
-  unlimited_plans: ["MSP Platinum"]  # Contract names excluded from billing audit
+  unlimited_plans: ["Managed Plan A"]  # Contract names excluded from billing audit
   tech_cost_per_hour: 55             # For profitability calculations
 ```
 
@@ -140,16 +140,55 @@ npm install
 npm run dev
 ```
 
+#### Production install (Ubuntu)
+
+The included `install.sh` script sets up the dashboard as a systemd service behind nginx. It handles all dependencies, builds the frontend, and configures everything to start on boot.
+
+```bash
+sudo bash install.sh
+```
+
+This will:
+- Install Python 3, Node.js 22, and nginx
+- Create a `psa-dashboard` system user
+- Copy the app to `/opt/psa-dashboard`
+- Build the frontend for production
+- Create a `psa-dashboard` systemd service for the backend
+- Configure nginx to serve the frontend and proxy API requests
+
+After install, open **http://your-server-ip** in your browser.
+
+**Managing the service:**
+
+```bash
+sudo systemctl status psa-dashboard    # check status
+sudo systemctl restart psa-dashboard   # restart after config changes
+sudo systemctl stop psa-dashboard      # stop the backend
+journalctl -u psa-dashboard -f         # tail logs
+```
+
+**Configuration** lives at `/opt/psa-dashboard/config.yaml`. Edit it and restart the service to apply changes:
+
+```bash
+sudo nano /opt/psa-dashboard/config.yaml
+sudo systemctl restart psa-dashboard
+```
+
+**Updating** after pulling new code: re-run `sudo bash install.sh`. Your `config.yaml` is preserved across runs.
+
 ### 4. Open the dashboard
 
-Go to **http://localhost:3000** in your browser.
+**Development:** Go to **http://localhost:3000**. The frontend dev server proxies API requests to the backend on port 8880.
 
-The frontend dev server proxies API requests to the backend on port 8080. On first launch, the backend runs a full sync from your PSA provider, which may take a couple of minutes depending on ticket volume. Subsequent syncs are incremental and run every 15 minutes by default. A full sync runs automatically at midnight to clean up deleted/trashed tickets.
+**Production (Ubuntu):** Go to **http://your-server-ip** (port 80, served by nginx).
+
+On first launch, the backend runs a full sync from your PSA provider, which may take a couple of minutes depending on ticket volume. Subsequent syncs are incremental and run every 15 minutes by default. A full sync runs automatically at midnight to clean up deleted/trashed tickets.
 
 ## Project Structure
 
 ```
 psa-dashboard/
+  install.sh                 # Ubuntu production installer (systemd + nginx)
   start.bat                  # Windows launch script
   start.sh                   # Linux/macOS launch script
   config.example.yaml        # Template config (tracked)
@@ -194,7 +233,7 @@ psa-dashboard/
 | `phone_sync.lookback_days` | | `30` | Days of phone history to sync |
 | `database.path` | | `./data/metrics.db` | SQLite database file path |
 | `server.host` | | `0.0.0.0` | Backend listen address |
-| `server.port` | | `8080` | Backend listen port |
+| `server.port` | | `8880` | Backend listen port |
 | `server.timezone` | | `America/Los_Angeles` | IANA timezone for date calculations |
 | `server.closed_statuses` | | `["Resolved", "Closed"]` | Ticket statuses considered terminal |
 | `billing.unlimited_plans` | | `[]` | Contract names excluded from billing audit |

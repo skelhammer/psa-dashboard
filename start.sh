@@ -47,7 +47,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Launch backend
-echo "[3/4] Starting backend on :8080..."
+echo "[3/4] Starting backend on :8880..."
 cd backend
 source .venv/bin/activate
 python run.py &
@@ -65,7 +65,7 @@ echo
 echo "============================================="
 echo "  PSA Dashboard is running!"
 echo "  Frontend: http://localhost:3000"
-echo "  Backend:  http://localhost:8080"
+echo "  Backend:  http://localhost:8880"
 echo "============================================="
 echo
 echo "Press Ctrl+C to stop."
