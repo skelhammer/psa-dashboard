@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 APP_DIR="$SCRIPT_DIR"
 APP_USER="$(stat -c '%U' "$APP_DIR")"
 NODE_MAJOR=22
+NGINX_PORT=5051
 
 # ---------- pre-flight ----------
 if [[ $EUID -ne 0 ]]; then
@@ -54,6 +55,15 @@ fi
 mkdir -p "$APP_DIR/backend/data"
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR/backend/data"
 
+# Ensure nginx (www-data) can traverse to the frontend dist directory
+HOME_DIR="$(dirname "$APP_DIR")"
+while [[ "$HOME_DIR" != "/" ]]; do
+    chmod o+x "$HOME_DIR"
+    HOME_DIR="$(dirname "$HOME_DIR")"
+done
+chmod o+x "$APP_DIR"
+chmod -R o+rX "$APP_DIR/frontend/dist"
+
 # ---------- backend venv ----------
 echo "[3/6] Setting up Python virtual environment..."
 sudo -u "$APP_USER" python3 -m venv "$APP_DIR/backend/.venv"
@@ -95,8 +105,8 @@ systemctl enable psa-dashboard.service
 echo "[6/6] Configuring nginx..."
 cat > /etc/nginx/sites-available/psa-dashboard <<EOF
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
+    listen ${NGINX_PORT};
+    listen [::]:${NGINX_PORT};
     server_name _;
 
     # Serve the built frontend
@@ -137,7 +147,7 @@ echo "============================================="
 echo "  Installation complete!"
 echo "============================================="
 echo
-echo "  Dashboard:  http://${SERVER_IP}"
+echo "  Dashboard:  http://${SERVER_IP}:${NGINX_PORT}"
 echo "  Backend:    http://127.0.0.1:8880 (proxied via nginx)"
 echo
 echo "  Config:     ${APP_DIR}/config.yaml"

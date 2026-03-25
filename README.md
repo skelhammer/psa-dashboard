@@ -155,7 +155,7 @@ This will:
 - Create a `psa-dashboard` systemd service for the backend
 - Configure nginx to serve the frontend and proxy API requests
 
-After install, open **http://your-server-ip** in your browser.
+After install, open **http://your-server-ip:5051** in your browser.
 
 **Managing the service:**
 
@@ -179,7 +179,7 @@ sudo systemctl restart psa-dashboard
 
 **Development:** Go to **http://localhost:3000**. The frontend dev server proxies API requests to the backend on port 8880.
 
-**Production (Ubuntu):** Go to **http://your-server-ip** (port 80, served by nginx).
+**Production (Ubuntu):** Go to **http://your-server-ip:5051** (served by nginx).
 
 On first launch, the backend runs a full sync from your PSA provider, which may take a couple of minutes depending on ticket volume. Subsequent syncs are incremental and run every 15 minutes by default. A full sync runs automatically at midnight to clean up deleted/trashed tickets.
 
