@@ -176,7 +176,7 @@ async def billing_summary(request: Request, filters: FilterParams = Depends()):
             [cid, *client_date_params],
         )
         with_time = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond} AND worklog_hours > 0",
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond} AND worklog_hours > 0 {resolved_flag_exclude}",
             [cid, *client_date_params],
         )
         hours = await conn.execute_fetchall(
