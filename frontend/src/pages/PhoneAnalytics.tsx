@@ -54,7 +54,7 @@ export default function PhoneAnalytics() {
   const { data: agentData } = usePhoneAgents()
   const { data: queueData } = usePhoneQueues()
 
-  if (isLoading) return <div className="text-gray-500">Loading phone analytics...</div>
+  if (isLoading && !overview) return <div className="text-gray-500">Loading phone analytics...</div>
 
   if (!overview || overview.total_calls === 0) {
     return (

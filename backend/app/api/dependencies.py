@@ -28,6 +28,8 @@ class FilterParams:
         status: str | None = Query(None),
         category: str | None = Query(None),
         tech_group: str | None = Query(None),
+        provider: str | None = Query(None, description="Filter by PSA provider (e.g. superops, zendesk)"),
+        hide_corp: bool = Query(False, description="Exclude Corp-tagged tickets (Zendesk)"),
     ):
         self.client_id = client_id
         self.technician_id = technician_id
@@ -35,6 +37,8 @@ class FilterParams:
         self.status = status
         self.category = category
         self.tech_group = tech_group
+        self.provider = provider
+        self.hide_corp = hide_corp
         self.date_range_key = date_range
 
         tz = _get_tz()
@@ -156,6 +160,11 @@ def build_where_clause(filters: FilterParams, prefix: str = "", include_date: bo
     if filters.tech_group:
         conditions.append(f"COALESCE({col_prefix}tech_group_name, 'Tier 1 Support') = ?")
         params.append(filters.tech_group)
+    if filters.provider:
+        conditions.append(f"{col_prefix}provider = ?")
+        params.append(filters.provider)
+    if filters.hide_corp:
+        conditions.append(f"{col_prefix}is_corp = 0")
 
     if conditions:
         return "WHERE " + " AND ".join(conditions), params

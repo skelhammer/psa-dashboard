@@ -11,17 +11,18 @@ from datetime import datetime
 
 import aiosqlite
 
+from app.api.queries import get_closed_statuses_sql
 from app.psa.base import PSAProvider
 
 logger = logging.getLogger(__name__)
 
 
-async def run_post_sync_hooks(conn: aiosqlite.Connection, provider: PSAProvider):
+async def run_post_sync_hooks(conn: aiosqlite.Connection, provider: PSAProvider, provider_name: str = ""):
     """Run all post-sync hooks."""
     await backfill_resolution_time(conn)
     await sync_billing_config(conn)
     await generate_billing_flags(conn)
-    await sync_conversations_for_open_tickets(conn, provider)
+    await sync_conversations_for_open_tickets(conn, provider, provider_name)
 
 
 async def backfill_resolution_time(conn: aiosqlite.Connection):
@@ -30,9 +31,10 @@ async def backfill_resolution_time(conn: aiosqlite.Connection):
     Old imported tickets often lack resolution_time. Using updated_time as a
     fallback keeps closed-ticket queries accurate without COALESCE everywhere.
     """
+    closed = get_closed_statuses_sql()
     result = await conn.execute(
-        """UPDATE tickets SET resolution_time = updated_time
-           WHERE status IN ('Resolved', 'Closed')
+        f"""UPDATE tickets SET resolution_time = updated_time
+           WHERE status IN {closed}
              AND resolution_time IS NULL
              AND updated_time IS NOT NULL"""
     )
@@ -153,11 +155,12 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
         min_hours = min_minutes / 60  # Convert config (minutes) to hours for comparison
 
         # MISSING_WORKLOG: resolved/closed tickets with 0 worklog
+        closed = get_closed_statuses_sql()
         tickets = await conn.execute_fetchall(
-            """SELECT id, display_id, subject
+            f"""SELECT id, display_id, subject
                FROM tickets
                WHERE client_id = ?
-                 AND status IN ('Resolved', 'Closed')
+                 AND status IN {closed}
                  AND (worklog_hours IS NULL OR worklog_hours = 0)""",
             (client_id,),
         )
@@ -180,10 +183,10 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
         # LOW_TIME: resolved/closed tickets with worklog < minimum
         if min_hours > 0:
             low_tickets = await conn.execute_fetchall(
-                """SELECT id, display_id, worklog_hours
+                f"""SELECT id, display_id, worklog_hours
                    FROM tickets
                    WHERE client_id = ?
-                     AND status IN ('Resolved', 'Closed')
+                     AND status IN {closed}
                      AND worklog_hours > 0
                      AND worklog_hours < ?""",
                 (client_id, min_hours),
@@ -246,21 +249,33 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
     logger.info("Billing flag generation complete")
 
 
-async def sync_conversations_for_open_tickets(conn: aiosqlite.Connection, provider: PSAProvider):
+async def sync_conversations_for_open_tickets(
+    conn: aiosqlite.Connection, provider: PSAProvider, provider_name: str = "",
+):
     """Sync conversation data for open tickets to detect awaiting-tech-reply.
 
-    Only syncs conversations for tickets in active statuses to avoid
-    expensive bulk conversation fetches.
+    Only syncs conversations for tickets owned by the current provider
+    in active statuses, to avoid calling the wrong API.
     """
     import asyncio
 
-    # Get open tickets that need conversation sync
-    open_tickets = await conn.execute_fetchall(
-        """SELECT id FROM tickets
-           WHERE status NOT IN ('Resolved', 'Closed')
-           ORDER BY updated_time DESC
-           LIMIT 50"""
-    )
+    # Get open tickets scoped to this provider
+    closed = get_closed_statuses_sql()
+    if provider_name:
+        open_tickets = await conn.execute_fetchall(
+            f"""SELECT id FROM tickets
+               WHERE status NOT IN {closed} AND provider = ?
+               ORDER BY updated_time DESC
+               LIMIT 50""",
+            (provider_name,),
+        )
+    else:
+        open_tickets = await conn.execute_fetchall(
+            f"""SELECT id FROM tickets
+               WHERE status NOT IN {closed}
+               ORDER BY updated_time DESC
+               LIMIT 50"""
+        )
 
     if not open_tickets:
         return
@@ -274,7 +289,9 @@ async def sync_conversations_for_open_tickets(conn: aiosqlite.Connection, provid
     async def fetch_and_update(ticket_id: str):
         async with semaphore:
             try:
-                convos = await provider.get_ticket_conversations(ticket_id)
+                # Strip provider prefix before calling the API
+                native_id = ticket_id.split(":", 1)[1] if ":" in ticket_id else ticket_id
+                convos = await provider.get_ticket_conversations(native_id)
                 if not convos:
                     return
 

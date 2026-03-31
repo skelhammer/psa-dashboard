@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS tickets (
     reopened INTEGER NOT NULL DEFAULT 0,
     first_response_business_minutes REAL,
     resolution_business_minutes REAL,
+    provider TEXT NOT NULL DEFAULT 'superops',
+    is_corp INTEGER NOT NULL DEFAULT 0,
     synced_at TEXT NOT NULL
 );
 
@@ -59,7 +61,8 @@ CREATE TABLE IF NOT EXISTS technicians (
     last_name TEXT NOT NULL DEFAULT '',
     email TEXT NOT NULL DEFAULT '',
     role TEXT NOT NULL DEFAULT '',
-    available_hours_per_week REAL NOT NULL DEFAULT 40.0
+    available_hours_per_week REAL NOT NULL DEFAULT 40.0,
+    provider TEXT NOT NULL DEFAULT 'superops'
 );
 
 CREATE TABLE IF NOT EXISTS clients (
@@ -69,7 +72,8 @@ CREATE TABLE IF NOT EXISTS clients (
     stage TEXT,
     status TEXT,
     profit_type TEXT,
-    account_number TEXT
+    account_number TEXT,
+    provider TEXT NOT NULL DEFAULT 'superops'
 );
 
 CREATE TABLE IF NOT EXISTS client_contracts (
@@ -81,6 +85,7 @@ CREATE TABLE IF NOT EXISTS client_contracts (
     status TEXT NOT NULL DEFAULT 'active',
     start_date TEXT,
     end_date TEXT,
+    provider TEXT NOT NULL DEFAULT 'superops',
     synced_at TEXT NOT NULL,
     FOREIGN KEY (client_id) REFERENCES clients(id)
 );
@@ -138,6 +143,7 @@ INSERT OR IGNORE INTO dashboard_config (key, value) VALUES
     ('work_queue_priority_low_weight', '25'),
     ('work_queue_age_weight_per_hour', '1');
 
+CREATE INDEX IF NOT EXISTS idx_tickets_provider ON tickets(provider);
 CREATE INDEX IF NOT EXISTS idx_tickets_fr_biz_min ON tickets(first_response_business_minutes);
 CREATE INDEX IF NOT EXISTS idx_tickets_res_biz_min ON tickets(resolution_business_minutes);
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
@@ -246,7 +252,85 @@ MIGRATIONS = [
     "ALTER TABLE billing_config ADD COLUMN monthly_contract_value REAL",
     "ALTER TABLE technicians ADD COLUMN dashboard_role TEXT NOT NULL DEFAULT 'technician'",
     "ALTER TABLE tickets RENAME COLUMN worklog_minutes TO worklog_hours",
+    # Multi-provider support: add provider column to entity tables
+    "ALTER TABLE tickets ADD COLUMN provider TEXT NOT NULL DEFAULT 'superops'",
+    # Corp ticket tagging (Zendesk custom field)
+    "ALTER TABLE tickets ADD COLUMN is_corp INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE technicians ADD COLUMN provider TEXT NOT NULL DEFAULT 'superops'",
+    "ALTER TABLE clients ADD COLUMN provider TEXT NOT NULL DEFAULT 'superops'",
+    "ALTER TABLE client_contracts ADD COLUMN provider TEXT NOT NULL DEFAULT 'superops'",
 ]
+
+
+async def _migrate_prefix_ids(conn: aiosqlite.Connection):
+    """One-time migration: prefix existing IDs with 'superops:' for multi-provider support.
+
+    Idempotent: skips rows that already contain a ':' in the ID.
+    Updates all foreign key references in a single transaction.
+    """
+    # Check if any unprefixed tickets exist
+    rows = await conn.execute_fetchall(
+        "SELECT COUNT(*) FROM tickets WHERE id NOT LIKE '%:%'"
+    )
+    if not rows or rows[0][0] == 0:
+        return  # Already migrated or empty database
+
+    logger.info("Migrating existing IDs to 'superops:' prefix for multi-provider support...")
+
+    # Prefix ticket IDs and their foreign key references
+    await conn.execute(
+        """UPDATE tickets SET
+            id = 'superops:' || id,
+            client_id = CASE WHEN client_id != '' THEN 'superops:' || client_id ELSE client_id END,
+            technician_id = CASE WHEN technician_id IS NOT NULL AND technician_id != '' THEN 'superops:' || technician_id ELSE technician_id END,
+            requester_id = CASE WHEN requester_id != '' THEN 'superops:' || requester_id ELSE requester_id END,
+            tech_group_id = CASE WHEN tech_group_id IS NOT NULL AND tech_group_id != '' THEN 'superops:' || tech_group_id ELSE tech_group_id END,
+            sla_id = CASE WHEN sla_id IS NOT NULL AND sla_id != '' THEN 'superops:' || sla_id ELSE sla_id END,
+            provider = 'superops'
+        WHERE id NOT LIKE '%:%'"""
+    )
+
+    # Prefix technician IDs
+    await conn.execute(
+        """UPDATE technicians SET
+            id = 'superops:' || id,
+            provider = 'superops'
+        WHERE id NOT LIKE '%:%'"""
+    )
+
+    # Prefix client IDs
+    await conn.execute(
+        """UPDATE clients SET
+            id = 'superops:' || id,
+            provider = 'superops'
+        WHERE id NOT LIKE '%:%'"""
+    )
+
+    # Prefix contract IDs and client references
+    await conn.execute(
+        """UPDATE client_contracts SET
+            contract_id = 'superops:' || contract_id,
+            client_id = CASE WHEN client_id NOT LIKE '%:%' THEN 'superops:' || client_id ELSE client_id END,
+            provider = 'superops'
+        WHERE contract_id NOT LIKE '%:%'"""
+    )
+
+    # Prefix billing_config client references
+    await conn.execute(
+        """UPDATE billing_config SET
+            client_id = 'superops:' || client_id
+        WHERE client_id NOT LIKE '%:%'"""
+    )
+
+    # Prefix billing_flags ticket references
+    await conn.execute(
+        """UPDATE billing_flags SET
+            ticket_id = 'superops:' || ticket_id
+        WHERE ticket_id NOT LIKE '%:%'"""
+    )
+
+    await conn.commit()
+    logger.info("ID prefix migration complete")
 
 
 class Database:
@@ -263,6 +347,8 @@ class Database:
         await self._run_migrations()
         await self._connection.executescript(SCHEMA_SQL)
         await self._connection.commit()
+        # Prefix existing IDs for multi-provider support (idempotent)
+        await _migrate_prefix_ids(self._connection)
         logger.info("Database initialized at %s", self.db_path)
 
     async def _run_migrations(self):

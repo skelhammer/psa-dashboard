@@ -44,6 +44,7 @@ class Ticket:
     resolution_time: datetime | None = None
     resolution_violated: bool | None = None
     worklog_hours: float = 0
+    is_corp: bool = False
 
 
 @dataclass

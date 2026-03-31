@@ -8,10 +8,10 @@ router = APIRouter(prefix="/api", tags=["sync"])
 
 
 async def _get_last_sync(request: Request) -> str | None:
-    """Return last sync time, falling back to sync_log if in-memory value is None (e.g. after restart)."""
-    engine = request.app.state.scheduler.engine
-    if engine.last_sync_time:
-        return engine.last_sync_time.isoformat()
+    """Return last sync time, falling back to sync_log if in-memory value is None."""
+    scheduler = request.app.state.scheduler
+    if scheduler.last_sync_time:
+        return scheduler.last_sync_time.isoformat()
     # Fall back to most recent completed sync in the database
     db = request.app.state.db
     conn = await db.get_connection()
@@ -26,10 +26,11 @@ async def _get_last_sync(request: Request) -> str | None:
 @router.get("/health")
 async def health(request: Request):
     scheduler = request.app.state.scheduler
+    providers = request.app.state.providers
     return {
         "status": "ok",
-        "provider": request.app.state.provider.get_provider_name(),
-        "syncing": scheduler.engine.is_syncing,
+        "providers": list(providers.keys()),
+        "syncing": scheduler.is_syncing,
         "last_sync": await _get_last_sync(request),
     }
 
@@ -52,11 +53,12 @@ async def trigger_full_sync(request: Request):
 @router.get("/sync/status")
 async def sync_status(request: Request):
     scheduler = request.app.state.scheduler
+    providers = request.app.state.providers
     db = request.app.state.db
 
     conn = await db.get_connection()
     rows = await conn.execute_fetchall(
-        "SELECT * FROM sync_log ORDER BY started_at DESC LIMIT 5"
+        "SELECT * FROM sync_log ORDER BY started_at DESC LIMIT 10"
     )
 
     recent_syncs = []
@@ -70,9 +72,19 @@ async def sync_status(request: Request):
             "provider_name": row["provider_name"],
         })
 
+    # Per-provider sync status
+    provider_status = {}
+    manager = request.app.state.manager
+    for name, engine in manager.engines.items():
+        provider_status[name] = {
+            "is_syncing": engine.is_syncing,
+            "last_sync": engine.last_sync_time.isoformat() if engine.last_sync_time else None,
+        }
+
     return {
-        "is_syncing": scheduler.engine.is_syncing,
+        "is_syncing": scheduler.is_syncing,
         "last_sync": await _get_last_sync(request),
-        "provider": request.app.state.provider.get_provider_name(),
+        "providers": list(providers.keys()),
+        "provider_status": provider_status,
         "recent_syncs": recent_syncs,
     }

@@ -25,6 +25,11 @@ def _build_filter_sql(filters: FilterParams, prefix: str = "") -> tuple[str, lis
     params = []
     col = f"{prefix}." if prefix else ""
 
+    if filters.provider:
+        conditions.append(f"{col}provider = ?")
+        params.append(filters.provider)
+    if filters.hide_corp:
+        conditions.append(f"{col}is_corp = 0")
     if filters.client_id:
         conditions.append(f"{col}client_id = ?")
         params.append(filters.client_id)
@@ -311,6 +316,8 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
 
     # Auto-granularity intervals for the selected date range
     intervals = _auto_intervals(start, end)
+    days = (end - start).days
+    volume_granularity = "day" if days <= 14 else ("week" if days <= 90 else "month")
 
     # Volume trend: tickets created per interval
     volume_trend = []
@@ -404,8 +411,28 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
             "violated": violated_count,
         })
 
+    # Daily new tickets (always daily granularity, last 30 days max)
+    daily_start = max(start, end - timedelta(days=30))
+    daily_start = daily_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    daily_new = []
+    d = daily_start
+    while d <= end:
+        next_d = d + timedelta(days=1)
+        row = await conn.execute_fetchall(
+            f"SELECT COUNT(*) FROM tickets WHERE created_time >= ? AND created_time < ?{extra_and}",
+            [d.isoformat(), next_d.isoformat(), *extra_params],
+        )
+        daily_new.append({
+            "date": d.strftime("%b %d"),
+            "day": d.strftime("%a"),
+            "count": row[0][0] or 0,
+        })
+        d = next_d
+
     return {
         "volume_trend": volume_trend,
+        "volume_granularity": volume_granularity,
+        "daily_new_tickets": daily_new,
         "aging_buckets": [{"bucket": k, "count": v} for k, v in aging_buckets.items()],
         "status_distribution": status_chart,
         "priority_distribution": priority_chart,

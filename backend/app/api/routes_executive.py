@@ -46,6 +46,11 @@ def _build_filter_sql(filters: FilterParams, prefix: str = "") -> tuple[str, lis
     params = []
     col = f"{prefix}." if prefix else ""
 
+    if filters.provider:
+        conditions.append(f"{col}provider = ?")
+        params.append(filters.provider)
+    if filters.hide_corp:
+        conditions.append(f"{col}is_corp = 0")
     if filters.client_id:
         conditions.append(f"{col}client_id = ?")
         params.append(filters.client_id)

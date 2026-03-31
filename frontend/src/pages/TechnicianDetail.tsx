@@ -34,7 +34,7 @@ export default function TechnicianDetail() {
   const params = toParams()
   const { data, isLoading } = useTechnicianDetail(techId, params)
 
-  if (isLoading) return <div className="text-gray-500">Loading...</div>
+  if (isLoading && !data) return <div className="text-gray-500">Loading...</div>
   if (data?.error) return <div className="text-red-400">{data.error}</div>
 
   const tech = data?.technician

@@ -6,16 +6,29 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, get_ticket_url, ticket_row_to_dict
 
 router = APIRouter(prefix="/api", tags=["manage-to-zero"])
 
 
 @router.get("/manage-to-zero")
-async def manage_to_zero(request: Request):
+async def manage_to_zero(
+    request: Request,
+    provider: str | None = Query(None, description="Filter by PSA provider"),
+    hide_corp: bool = Query(False, description="Exclude Corp-tagged tickets"),
+):
     """Get all Manage to Zero card counts."""
     db = request.app.state.db
     conn = await db.get_connection()
+
+    # Provider + Corp filter clauses
+    prov_clause = ""
+    prov_params: list = []
+    if provider:
+        prov_clause = " AND provider = ?"
+        prov_params = [provider]
+    if hide_corp:
+        prov_clause += " AND is_corp = 0"
 
     # Get configurable thresholds
     stale_days_row = await conn.execute_fetchall(
@@ -35,48 +48,58 @@ async def manage_to_zero(request: Request):
 
     # Unassigned tickets
     unassigned = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND (technician_id IS NULL OR technician_id = '')"
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND (technician_id IS NULL OR technician_id = ''){prov_clause}",
+        prov_params,
     )
 
     # No first response
     no_response = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND first_response_time IS NULL"
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND first_response_time IS NULL{prov_clause}",
+        prov_params,
     )
 
     # Awaiting tech reply (customer replied, tech hasn't)
     awaiting_tech = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND last_responder_type = 'requester'"
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND last_responder_type = 'requester'{prov_clause}",
+        prov_params,
     )
 
     # Stale tickets (no update in X days)
     stale = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND updated_time < ?",
-        (stale_cutoff,),
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND updated_time < ?{prov_clause}",
+        [stale_cutoff, *prov_params],
     )
 
     # SLA breaching soon (within warning window, not yet violated)
     sla_breaching = await conn.execute_fetchall(
         f"""SELECT COUNT(*) FROM tickets
-            WHERE status NOT IN {CLOSED_STATUSES_SQL}
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}{prov_clause}
             AND (
                 (first_response_due IS NOT NULL AND first_response_due <= ? AND first_response_due > ? AND (first_response_violated IS NULL OR first_response_violated = 0))
                 OR
                 (resolution_due IS NOT NULL AND resolution_due <= ? AND resolution_due > ? AND (resolution_violated IS NULL OR resolution_violated = 0))
             )""",
-        (sla_warn_cutoff, now_iso, sla_warn_cutoff, now_iso),
+        [*prov_params, sla_warn_cutoff, now_iso, sla_warn_cutoff, now_iso],
     )
 
     # SLA already violated (still open)
     sla_violated = await conn.execute_fetchall(
         f"""SELECT COUNT(*) FROM tickets
-            WHERE status NOT IN {CLOSED_STATUSES_SQL}
-            AND (first_response_violated = 1 OR resolution_violated = 1)"""
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}{prov_clause}
+            AND (first_response_violated = 1 OR resolution_violated = 1)""",
+        prov_params,
     )
 
-    # Unresolved billing flags
-    billing_flags = await conn.execute_fetchall(
-        "SELECT COUNT(*) FROM billing_flags WHERE resolved = 0"
-    )
+    # Unresolved billing flags (join with tickets for provider filtering)
+    if provider:
+        billing_flags = await conn.execute_fetchall(
+            "SELECT COUNT(*) FROM billing_flags bf JOIN tickets t ON bf.ticket_id = t.id WHERE bf.resolved = 0 AND t.provider = ?",
+            [provider],
+        )
+    else:
+        billing_flags = await conn.execute_fetchall(
+            "SELECT COUNT(*) FROM billing_flags WHERE resolved = 0"
+        )
 
     return {
         "cards": {
@@ -97,6 +120,8 @@ async def mtz_drilldown(
     request: Request,
     client_id: str | None = Query(None),
     technician_id: str | None = Query(None),
+    provider: str | None = Query(None),
+    hide_corp: bool = Query(False),
 ):
     """Get ticket list for a specific MTZ card type."""
     db = request.app.state.db
@@ -112,6 +137,11 @@ async def mtz_drilldown(
     if technician_id:
         extra_filters.append("AND technician_id = ?")
         params.append(technician_id)
+    if provider:
+        extra_filters.append("AND provider = ?")
+        params.append(provider)
+    if hide_corp:
+        extra_filters.append("AND is_corp = 0")
 
     extra = " ".join(extra_filters)
 
@@ -192,8 +222,7 @@ async def mtz_drilldown(
     tickets = [ticket_row_to_dict(row) for row in rows]
 
     # Add ticket URLs
-    provider = request.app.state.provider
     for t in tickets:
-        t["url"] = provider.get_ticket_url(t["id"])
+        t["url"] = get_ticket_url(t["id"], request.app.state.providers)
 
     return {"tickets": tickets, "count": len(tickets)}

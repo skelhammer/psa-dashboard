@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import api from './client'
 
 // Sync
@@ -53,6 +53,7 @@ export function useOverview(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['overview', params],
     queryFn: () => api.get('/overview', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -60,23 +61,26 @@ export function useOverviewCharts(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['overview-charts', params],
     queryFn: () => api.get('/overview/charts', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
 // Manage to Zero
-export function useManageToZero() {
+export function useManageToZero(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['manage-to-zero'],
-    queryFn: () => api.get('/manage-to-zero').then(r => r.data),
+    queryKey: ['manage-to-zero', params],
+    queryFn: () => api.get('/manage-to-zero', { params }).then(r => r.data),
     refetchInterval: 30_000,
+    placeholderData: keepPreviousData,
   })
 }
 
-export function useMtzDrilldown(cardType: string | null) {
+export function useMtzDrilldown(cardType: string | null, params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['mtz-drilldown', cardType],
-    queryFn: () => api.get(`/manage-to-zero/${cardType}`).then(r => r.data),
+    queryKey: ['mtz-drilldown', cardType, params],
+    queryFn: () => api.get(`/manage-to-zero/${cardType}`, { params }).then(r => r.data),
     enabled: !!cardType,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -86,6 +90,7 @@ export function useWorkQueue(params?: Record<string, string>) {
     queryKey: ['work-queue', params],
     queryFn: () => api.get('/work-queue', { params }).then(r => r.data),
     refetchInterval: 30_000,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -94,6 +99,7 @@ export function useTechnicians(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['technicians', params],
     queryFn: () => api.get('/technicians', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -102,6 +108,7 @@ export function useTechnicianDetail(techId: string | undefined, params?: Record<
     queryKey: ['technician', techId, params],
     queryFn: () => api.get(`/technicians/${techId}`, { params }).then(r => r.data),
     enabled: !!techId,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -110,6 +117,7 @@ export function useClients(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['clients', params],
     queryFn: () => api.get('/clients', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -118,6 +126,7 @@ export function useClientDetail(clientId: string | undefined, params?: Record<st
     queryKey: ['client', clientId, params],
     queryFn: () => api.get(`/clients/${clientId}`, { params }).then(r => r.data),
     enabled: !!clientId,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -126,6 +135,7 @@ export function useBillingFlags(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['billing-flags', params],
     queryFn: () => api.get('/billing/flags', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -133,6 +143,7 @@ export function useBillingSummary(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['billing-summary', params],
     queryFn: () => api.get('/billing/summary', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -141,6 +152,7 @@ export function useExecutiveReport(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['executive-report', params],
     queryFn: () => api.get('/executive/report', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -148,6 +160,7 @@ export function useExecutiveCharts(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['executive-charts', params],
     queryFn: () => api.get('/executive/charts', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -202,6 +215,7 @@ export function useClientProfitability(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['client-profitability', params],
     queryFn: () => api.get('/clients/profitability', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -210,6 +224,7 @@ export function useTeams(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['teams', params],
     queryFn: () => api.get('/teams', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 

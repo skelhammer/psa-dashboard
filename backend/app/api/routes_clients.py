@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import FilterParams
-from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, get_ticket_url, ticket_row_to_dict
 from app.config import get_settings
 
 router = APIRouter(prefix="/api", tags=["clients"])
@@ -28,6 +28,11 @@ def _build_filter_sql(filters: FilterParams, prefix: str = "") -> tuple[str, lis
     params = []
     col = f"{prefix}." if prefix else ""
 
+    if filters.provider:
+        conditions.append(f"{col}provider = ?")
+        params.append(filters.provider)
+    if filters.hide_corp:
+        conditions.append(f"{col}is_corp = 0")
     if filters.technician_id:
         conditions.append(f"{col}technician_id = ?")
         params.append(filters.technician_id)
@@ -189,7 +194,7 @@ async def clients_list(request: Request, filters: FilterParams = Depends()):
             f"""SELECT COUNT(*) FROM tickets t
                JOIN billing_config bc ON t.client_id = bc.client_id
                WHERE t.client_id = ? AND bc.track_billing = 1
-               AND t.status IN ('Resolved', 'Closed')
+               AND t.status IN {CLOSED_STATUSES_SQL}
                AND t.resolution_time >= ? AND t.resolution_time <= ?{extra_and_t}""",
             [client_id, period_start, period_end, *extra_params],
         )
@@ -197,7 +202,7 @@ async def clients_list(request: Request, filters: FilterParams = Depends()):
             f"""SELECT COUNT(*) FROM tickets t
                JOIN billing_config bc ON t.client_id = bc.client_id
                WHERE t.client_id = ? AND bc.track_billing = 1
-               AND t.status IN ('Resolved', 'Closed')
+               AND t.status IN {CLOSED_STATUSES_SQL}
                AND t.resolution_time >= ? AND t.resolution_time <= ?
                AND t.worklog_hours > 0{extra_and_t}""",
             [client_id, period_start, period_end, *extra_params],
@@ -408,10 +413,9 @@ async def client_detail(cid: str, request: Request, filters: FilterParams = Depe
         [client_id, *extra_params],
     )
 
-    provider = request.app.state.provider
     tickets = [ticket_row_to_dict(row) for row in open_tickets_rows]
     for t in tickets:
-        t["url"] = provider.get_ticket_url(t["id"])
+        t["url"] = get_ticket_url(t["id"], request.app.state.providers)
 
     # Category breakdown
     categories = await conn.execute_fetchall(

@@ -90,7 +90,7 @@ export default function Layout() {
         {/* Provider info */}
         <div className="px-4 py-3 border-t border-white/[0.08]">
           <p className="text-[10px] text-gray-600 font-medium">
-            {syncStatus?.provider || '...'}
+            {syncStatus?.providers?.join(' + ') || syncStatus?.provider || '...'}
           </p>
         </div>
       </aside>

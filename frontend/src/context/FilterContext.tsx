@@ -10,11 +10,15 @@ interface FilterState {
   status: string
   category: string
   techGroup: string
+  provider: string
+  showCorp: boolean
 }
 
 interface FilterContextType {
   filters: FilterState
   setFilter: (key: keyof FilterState, value: string) => void
+  setFilters: (updates: Partial<FilterState>) => void
+  toggleCorp: () => void
   resetFilters: () => void
   toParams: () => Record<string, string>
 }
@@ -29,18 +33,28 @@ const defaults: FilterState = {
   status: '',
   category: '',
   techGroup: '',
+  provider: '',
+  showCorp: true,
 }
 
 const FilterContext = createContext<FilterContextType | null>(null)
 
 export function FilterProvider({ children }: { children: ReactNode }) {
-  const [filters, setFilters] = useState<FilterState>(defaults)
+  const [filters, setFiltersState] = useState<FilterState>(defaults)
 
   const setFilter = (key: keyof FilterState, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
+    setFiltersState(prev => ({ ...prev, [key]: value }))
   }
 
-  const resetFilters = () => setFilters(defaults)
+  const batchSetFilters = (updates: Partial<FilterState>) => {
+    setFiltersState(prev => ({ ...prev, ...updates }))
+  }
+
+  const toggleCorp = () => {
+    setFiltersState(prev => ({ ...prev, showCorp: !prev.showCorp }))
+  }
+
+  const resetFilters = () => setFiltersState(defaults)
 
   const toParams = () => {
     const params: Record<string, string> = {}
@@ -57,11 +71,13 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     if (filters.status) params.status = filters.status
     if (filters.category) params.category = filters.category
     if (filters.techGroup) params.tech_group = filters.techGroup
+    if (filters.provider) params.provider = filters.provider
+    if (!filters.showCorp) params.hide_corp = 'true'
     return params
   }
 
   return (
-    <FilterContext.Provider value={{ filters, setFilter, resetFilters, toParams }}>
+    <FilterContext.Provider value={{ filters, setFilter, setFilters: batchSetFilters, toggleCorp, resetFilters, toParams }}>
       {children}
     </FilterContext.Provider>
   )

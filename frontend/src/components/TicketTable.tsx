@@ -20,6 +20,7 @@ interface Ticket {
   resolution_due?: string | null
   resolution_violated?: boolean | null
   worklog_hours: number
+  provider?: string | null
   url?: string
   rank?: number
   score?: number
@@ -45,14 +46,24 @@ const defaultColumns: Column[] = [
     label: 'ID',
     sortable: true,
     render: (t) => (
-      <a
-        href={t.url || '#'}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-brand-primary-light hover:text-brand-primary hover:underline font-mono text-xs transition-colors"
-      >
-        {t.display_id}
-      </a>
+      <span className="inline-flex items-center gap-1.5">
+        {t.provider && (
+          <span className={clsx(
+            'px-1 py-0.5 rounded text-[9px] font-semibold uppercase leading-none',
+            t.provider === 'zendesk' ? 'bg-orange-500/15 text-orange-400' : 'bg-blue-500/15 text-blue-400'
+          )}>
+            {t.provider === 'zendesk' ? 'ZD' : 'SO'}
+          </span>
+        )}
+        <a
+          href={t.url || '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-brand-primary-light hover:text-brand-primary hover:underline font-mono text-xs transition-colors"
+        >
+          {t.display_id}
+        </a>
+      </span>
     ),
   },
   { key: 'subject', label: 'Subject', sortable: true },

@@ -1,9 +1,19 @@
 psa:
-  provider: mock  # Options: superops, mock (change to "superops" for live data)
+  # List of active providers. All enabled providers sync simultaneously.
+  # Options: superops, zendesk, mock
+  providers: [mock]  # e.g. [superops, zendesk] for dual-provider
   superops:
     api_url: https://api.superops.ai/msp
     api_token: YOUR_API_TOKEN_HERE
     subdomain: YOUR_SUBDOMAIN
+  zendesk:
+    subdomain: YOUR_SUBDOMAIN
+    email: agent@yourcompany.com
+    api_token: YOUR_ZENDESK_API_TOKEN
+    page_size: 100
+    ticket_url_template: "https://yourcompany.zendesk.com/agent/tickets/{ticket_id}"
+    # exclude_custom_fields: ["custom_field_12345:true"]
+    # status_display_overrides: {"Escalated": "Under Investigation"}
   halopsa:  # Pre-stub for future use
     api_url: https://INSTANCE.halopsa.com/api
     client_id: YOUR_CLIENT_ID

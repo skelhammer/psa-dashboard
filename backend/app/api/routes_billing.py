@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
 from app.api.dependencies import FilterParams
-from app.api.queries import PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import PRIORITY_ORDER, get_closed_statuses_sql, get_ticket_url, ticket_row_to_dict
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
@@ -55,6 +55,11 @@ async def billing_flags(
     if filters.tech_group:
         conditions.append("COALESCE(t.tech_group_name, 'Tier 1 Support') = ?")
         params.append(filters.tech_group)
+    if filters.provider:
+        conditions.append("t.provider = ?")
+        params.append(filters.provider)
+    if filters.hide_corp:
+        conditions.append("t.is_corp = 0")
 
     where = " AND ".join(conditions)
 
@@ -69,7 +74,7 @@ async def billing_flags(
         params,
     )
 
-    provider = request.app.state.provider
+    providers = request.app.state.providers
     flags = []
     for row in rows:
         flags.append({
@@ -90,7 +95,7 @@ async def billing_flags(
             "resolution_note": row["resolution_note"],
             "worklog_hours": row["worklog_hours"],
             "created_time": row["created_time"],
-            "url": provider.get_ticket_url(row["ticket_id"]),
+            "url": get_ticket_url(row["ticket_id"], providers),
         })
 
     return {"flags": flags, "count": len(flags), "date_range_label": filters.date_range_label}
@@ -171,16 +176,17 @@ async def billing_summary(request: Request, filters: FilterParams = Depends()):
         resolved_flag_exclude = """AND id NOT IN (
             SELECT ticket_id FROM billing_flags WHERE resolved = 1 AND flag_type = 'MISSING_WORKLOG'
         )"""
+        closed_sql = get_closed_statuses_sql()
         total = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond} {resolved_flag_exclude}",
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN {closed_sql} AND {client_date_cond} {resolved_flag_exclude}",
             [cid, *client_date_params],
         )
         with_time = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond} AND worklog_hours > 0 {resolved_flag_exclude}",
+            f"SELECT COUNT(*) FROM tickets WHERE client_id = ? AND status IN {closed_sql} AND {client_date_cond} AND worklog_hours > 0 {resolved_flag_exclude}",
             [cid, *client_date_params],
         )
         hours = await conn.execute_fetchall(
-            f"SELECT SUM(worklog_hours) FROM tickets WHERE client_id = ? AND status IN ('Resolved', 'Closed') AND {client_date_cond}",
+            f"SELECT SUM(worklog_hours) FROM tickets WHERE client_id = ? AND status IN {closed_sql} AND {client_date_cond}",
             [cid, *client_date_params],
         )
         flags = await conn.execute_fetchall(

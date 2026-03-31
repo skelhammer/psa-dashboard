@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from app.api.dependencies import FilterParams
-from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, get_ticket_url, ticket_row_to_dict
 
 router = APIRouter(prefix="/api", tags=["technicians"])
 
@@ -31,9 +31,14 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
     period_start = filters.date_from.isoformat()
     period_end = filters.date_to.isoformat() if filters.date_to else now.isoformat()
 
-    # Build extra filter conditions from client/priority
+    # Build extra filter conditions from client/priority/provider
     extra_and = ""
     extra_params: list = []
+    if filters.provider:
+        extra_and += " AND provider = ?"
+        extra_params.append(filters.provider)
+    if filters.hide_corp:
+        extra_and += " AND is_corp = 0"
     if filters.client_id:
         extra_and += " AND client_id = ?"
         extra_params.append(filters.client_id)
@@ -45,7 +50,7 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
         extra_params.append(filters.tech_group)
 
     # For joined queries (t. prefix)
-    extra_and_t = extra_and.replace("client_id", "t.client_id").replace("priority", "t.priority").replace("tech_group_name", "t.tech_group_name")
+    extra_and_t = extra_and.replace("client_id", "t.client_id").replace("priority", "t.priority").replace("tech_group_name", "t.tech_group_name").replace(" AND provider", " AND t.provider")
 
     stale_days_row = await conn.execute_fetchall(
         "SELECT value FROM dashboard_config WHERE key = 'stale_ticket_threshold_days'"
@@ -135,14 +140,14 @@ async def technicians_list(request: Request, filters: FilterParams = Depends()):
             f"""SELECT COUNT(*) FROM tickets t
                JOIN billing_config bc ON t.client_id = bc.client_id
                WHERE t.technician_id = ? AND bc.track_billing = 1
-               AND t.status IN ('Resolved', 'Closed') AND t.resolution_time >= ? AND t.resolution_time <= ?{extra_and_t}""",
+               AND t.status IN {CLOSED_STATUSES_SQL} AND t.resolution_time >= ? AND t.resolution_time <= ?{extra_and_t}""",
             [tech_id, period_start, period_end, *extra_params],
         )
         billed_tickets = await conn.execute_fetchall(
             f"""SELECT COUNT(*) FROM tickets t
                JOIN billing_config bc ON t.client_id = bc.client_id
                WHERE t.technician_id = ? AND bc.track_billing = 1
-               AND t.status IN ('Resolved', 'Closed') AND t.resolution_time >= ? AND t.resolution_time <= ?
+               AND t.status IN {CLOSED_STATUSES_SQL} AND t.resolution_time >= ? AND t.resolution_time <= ?
                AND t.worklog_hours > 0{extra_and_t}""",
             [tech_id, period_start, period_end, *extra_params],
         )
@@ -188,6 +193,11 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
     # Build extra filter conditions
     extra_and = ""
     extra_params: list = []
+    if filters.provider:
+        extra_and += " AND provider = ?"
+        extra_params.append(filters.provider)
+    if filters.hide_corp:
+        extra_and += " AND is_corp = 0"
     if filters.client_id:
         extra_and += " AND client_id = ?"
         extra_params.append(filters.client_id)
@@ -359,15 +369,15 @@ async def technician_detail(tech_id: str, request: Request, filters: FilterParam
         [tech_id, *extra_params],
     )
 
-    provider = request.app.state.provider
+    providers = request.app.state.providers
 
     open_list = [ticket_row_to_dict(row) for row in open_tickets]
     for t in open_list:
-        t["url"] = provider.get_ticket_url(t["id"])
+        t["url"] = get_ticket_url(t["id"], providers)
 
     closed_list = [ticket_row_to_dict(row) for row in recent_closed_rows]
     for t in closed_list:
-        t["url"] = provider.get_ticket_url(t["id"])
+        t["url"] = get_ticket_url(t["id"], providers)
 
     dashboard_role = "technician"
     try:

@@ -101,7 +101,7 @@ export default function ExecutiveReport() {
   const { data: charts } = useExecutiveCharts(params)
   const { data: summary } = useExecutiveSummary()
 
-  if (isLoading) {
+  if (isLoading && !report) {
     return <div className="text-gray-500">Loading executive report...</div>
   }
 

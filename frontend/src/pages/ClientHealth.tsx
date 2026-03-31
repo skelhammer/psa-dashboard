@@ -42,7 +42,7 @@ export default function ClientHealth() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<'health' | 'profitability'>('health')
 
-  if (isLoading) return <div className="text-gray-500">Loading...</div>
+  if (isLoading && !data) return <div className="text-gray-500">Loading...</div>
 
   const clients = data?.clients || []
   const periodLabel = data?.date_range_label || ''

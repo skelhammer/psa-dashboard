@@ -196,7 +196,7 @@ export default function Technicians() {
   const [sortCol, setSortCol] = useState<string>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
-  if (isLoading) return <div className="text-gray-500">Loading...</div>
+  if (isLoading && !data) return <div className="text-gray-500">Loading...</div>
 
   const techs = data?.technicians || []
   const teams = teamsData?.teams || []

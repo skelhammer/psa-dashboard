@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useManageToZero, useMtzDrilldown } from '../api/hooks'
+import { useFilterContext } from '../context/FilterContext'
 import { zeroTargetColor, zeroTargetTextColor } from '../utils/formatting'
 import TicketTable from '../components/TicketTable'
 import clsx from 'clsx'
@@ -15,11 +16,20 @@ const CARDS = [
 ]
 
 export default function ManageToZero() {
-  const { data, isLoading } = useManageToZero()
+  const { toParams } = useFilterContext()
+  const providerParams = (() => {
+    const p = toParams()
+    // MTZ only needs the provider and corp filters, not date/other filters
+    const result: Record<string, string> = {}
+    if (p.provider) result.provider = p.provider
+    if (p.hide_corp) result.hide_corp = p.hide_corp
+    return result
+  })()
+  const { data, isLoading } = useManageToZero(providerParams)
   const [activeCard, setActiveCard] = useState<string | null>(null)
-  const { data: drilldown, isLoading: drillLoading } = useMtzDrilldown(activeCard)
+  const { data: drilldown, isLoading: drillLoading } = useMtzDrilldown(activeCard, providerParams)
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return <div className="text-gray-500">Loading...</div>
   }
 

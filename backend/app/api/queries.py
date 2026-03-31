@@ -17,13 +17,31 @@ END
 """
 
 
-def _build_closed_statuses_sql() -> str:
+def get_closed_statuses_sql() -> str:
+    """Build SQL IN-clause for closed statuses from config.
+
+    Called per-use rather than cached at import time so that config
+    changes (e.g. adding Zendesk statuses) take effect immediately.
+    """
     statuses = get_settings().server.closed_statuses
     return "(" + ", ".join(f"'{s}'" for s in statuses) + ")"
 
 
-# Built at import time from config
-CLOSED_STATUSES_SQL = _build_closed_statuses_sql()
+# Backward-compat alias (prefer calling get_closed_statuses_sql() directly)
+CLOSED_STATUSES_SQL = get_closed_statuses_sql()
+
+
+def get_ticket_url(ticket_id: str, providers: dict) -> str:
+    """Generate a ticket URL by extracting the provider prefix from the ticket ID."""
+    if ":" in ticket_id:
+        provider_name, native_id = ticket_id.split(":", 1)
+        if provider_name in providers:
+            return providers[provider_name].get_ticket_url(native_id)
+    # Fallback: try first provider
+    if providers:
+        first = next(iter(providers.values()))
+        return first.get_ticket_url(ticket_id)
+    return ""
 
 
 def ticket_row_to_dict(row) -> dict:
@@ -31,6 +49,7 @@ def ticket_row_to_dict(row) -> dict:
     return {
         "id": row["id"],
         "display_id": row["display_id"],
+        "provider": row["provider"] if "provider" in row.keys() else None,
         "subject": row["subject"],
         "ticket_type": row["ticket_type"],
         "source": row["source"],

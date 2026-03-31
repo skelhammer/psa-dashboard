@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import get_database
 from app.phone.factory import get_phone_provider
-from app.psa.factory import get_provider
+from app.psa.factory import get_providers
 from app.sync.engine import SyncEngine
+from app.sync.manager import MultiProviderSyncManager
 from app.sync.scheduler import SyncScheduler
 
 logging.basicConfig(
@@ -25,24 +26,29 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: init DB, create provider, start sync scheduler."""
+    """Startup: init DB, create providers, start sync scheduler."""
     settings = get_settings()
     logger.info("Starting PSA Dashboard")
-    logger.info("PSA provider: %s", settings.psa.provider)
 
     # Initialize database
     db = get_database(settings.db_path)
     await db.initialize()
     app.state.db = db
 
-    # Create provider
-    provider = get_provider(settings)
-    app.state.provider = provider
+    # Create all configured PSA providers
+    providers_list = get_providers(settings)
+    provider_map = {p.get_provider_name().lower(): p for p in providers_list}
+    logger.info("PSA providers: %s", ", ".join(provider_map.keys()))
 
-    # Create and start sync scheduler
-    engine = SyncEngine(provider, db)
-    scheduler = SyncScheduler(engine, settings.sync.interval_minutes)
+    app.state.providers = provider_map
+    app.state.provider = providers_list[0]  # Backward compat
+
+    # Create sync engines (one per provider) and manager
+    engines = {name: SyncEngine(p, db) for name, p in provider_map.items()}
+    manager = MultiProviderSyncManager(engines)
+    scheduler = SyncScheduler(manager, settings.sync.interval_minutes)
     app.state.scheduler = scheduler
+    app.state.manager = manager
     await scheduler.start()
 
     # Create phone provider if configured
@@ -55,8 +61,6 @@ async def lifespan(app: FastAPI):
             phone_provider, db, settings.phone_sync.lookback_days
         )
         app.state.phone_engine = phone_engine
-        # Run initial phone sync
-        import asyncio
         asyncio.create_task(_phone_sync_loop(
             phone_engine, settings.phone_sync.interval_minutes
         ))

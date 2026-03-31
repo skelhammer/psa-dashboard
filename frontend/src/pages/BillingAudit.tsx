@@ -136,7 +136,7 @@ export default function BillingAudit() {
       </div>
 
       {/* Flags Table */}
-      {isLoading ? (
+      {isLoading && !flags ? (
         <div className="text-gray-500">Loading...</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-white/[0.08] shadow-lg shadow-black/20">

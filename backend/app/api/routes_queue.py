@@ -6,7 +6,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Query, Request
 
-from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, ticket_row_to_dict
+from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, get_ticket_url, ticket_row_to_dict
 
 router = APIRouter(prefix="/api", tags=["work-queue"])
 
@@ -101,6 +101,8 @@ async def work_queue(
     priority: str | None = Query(None),
     status: str | None = Query(None),
     tech_group: str | None = Query(None),
+    provider: str | None = Query(None),
+    hide_corp: bool = Query(False),
     unassigned_only: bool = Query(False),
 ):
     """Get prioritized work queue of open tickets."""
@@ -125,6 +127,11 @@ async def work_queue(
     if tech_group:
         conditions.append("COALESCE(tech_group_name, 'Tier 1 Support') = ?")
         params.append(tech_group)
+    if provider:
+        conditions.append("provider = ?")
+        params.append(provider)
+    if hide_corp:
+        conditions.append("is_corp = 0")
     if unassigned_only:
         conditions.append("(technician_id IS NULL OR technician_id = '')")
 
@@ -143,7 +150,7 @@ async def work_queue(
 
     for ticket in tickets:
         ticket["score"] = _compute_score(ticket, weights, now)
-        ticket["url"] = request.app.state.provider.get_ticket_url(ticket["id"])
+        ticket["url"] = get_ticket_url(ticket["id"], request.app.state.providers)
 
     # Sort by score descending
     tickets.sort(key=lambda t: t["score"], reverse=True)

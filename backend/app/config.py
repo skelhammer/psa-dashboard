@@ -22,9 +22,24 @@ class HaloPSAConfig:
 
 
 @dataclass
+class ZendeskConfig:
+    subdomain: str = ""
+    email: str = ""
+    api_token: str = ""
+    page_size: int = 100
+    ticket_url_template: str = ""
+    exclude_custom_fields: list[str] = field(default_factory=list)
+    status_display_overrides: dict[str, str] = field(default_factory=dict)
+    extra_agents: dict[str, str] = field(default_factory=dict)
+    tech_merge_map: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class PSAConfig:
-    provider: str = "mock"
+    providers: list[str] = field(default_factory=lambda: ["mock"])
+    provider: str = ""  # Deprecated; use providers list. Kept for backward compat.
     superops: SuperOpsConfig = field(default_factory=SuperOpsConfig)
+    zendesk: ZendeskConfig = field(default_factory=ZendeskConfig)
     halopsa: HaloPSAConfig = field(default_factory=HaloPSAConfig)
 
 
@@ -137,9 +152,18 @@ def load_settings(config_path: Path | None = None) -> Settings:
         raw = {}
 
     psa_raw = raw.get("psa", {})
+    # Support both 'providers' (list) and 'provider' (single string, backward compat)
+    if "providers" in psa_raw:
+        providers_list = psa_raw["providers"]
+    elif "provider" in psa_raw:
+        providers_list = [psa_raw["provider"]]
+    else:
+        providers_list = ["mock"]
     psa = PSAConfig(
-        provider=psa_raw.get("provider", "mock"),
+        providers=providers_list,
+        provider=psa_raw.get("provider", ""),
         superops=_build_nested(SuperOpsConfig, psa_raw.get("superops")),
+        zendesk=_build_nested(ZendeskConfig, psa_raw.get("zendesk")),
         halopsa=_build_nested(HaloPSAConfig, psa_raw.get("halopsa")),
     )
 

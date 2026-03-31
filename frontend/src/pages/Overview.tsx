@@ -28,7 +28,7 @@ export default function Overview() {
   const { data, isLoading } = useOverview(params)
   const { data: charts } = useOverviewCharts(params)
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return <div className="text-gray-500">Loading overview...</div>
   }
 
@@ -174,7 +174,7 @@ export default function Overview() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Volume Trend */}
-        <ChartCard title="Ticket Volume" exportData={charts?.volume_trend} exportFilename="volume_trend">
+        <ChartCard title={`Ticket Volume per ${charts?.volume_granularity === 'day' ? 'Day' : charts?.volume_granularity === 'month' ? 'Month' : 'Week'}`} exportData={charts?.volume_trend} exportFilename="volume_trend">
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={charts?.volume_trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -182,6 +182,25 @@ export default function Overview() {
               <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
               <Tooltip {...tooltipStyle} />
               <Bar dataKey="count" fill={BRAND.primary} radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        {/* Daily New Tickets */}
+        <ChartCard title="New Tickets Per Day" exportData={charts?.daily_new_tickets} exportFilename="daily_new_tickets">
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={charts?.daily_new_tickets || []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} allowDecimals={false} />
+              <Tooltip
+                {...tooltipStyle}
+                labelFormatter={(label: string, payload: any[]) => {
+                  const day = payload?.[0]?.payload?.day
+                  return day ? `${day}, ${label}` : label
+                }}
+              />
+              <Bar dataKey="count" name="New Tickets" fill="#06B6D4" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

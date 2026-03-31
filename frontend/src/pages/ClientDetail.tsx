@@ -25,7 +25,7 @@ export default function ClientDetail() {
   const params = toParams()
   const { data, isLoading } = useClientDetail(clientId, params)
 
-  if (isLoading) return <div className="text-gray-500">Loading...</div>
+  if (isLoading && !data) return <div className="text-gray-500">Loading...</div>
   if (data?.error) return <div className="text-red-400">{data.error}</div>
 
   const client = data?.client
