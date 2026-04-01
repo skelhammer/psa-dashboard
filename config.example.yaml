@@ -12,8 +12,12 @@ psa:
     api_token: YOUR_ZENDESK_API_TOKEN
     page_size: 100
     ticket_url_template: "https://yourcompany.zendesk.com/agent/tickets/{ticket_id}"
-    # exclude_custom_fields: ["custom_field_12345:true"]
-    # status_display_overrides: {"Escalated": "Under Investigation"}
+    # exclude_custom_fields: ["custom_field_12345:true"]  # Tag matching tickets as Corp
+    # status_display_overrides: {"O-CustReplied": "Customer Replied"}
+    # extra_agents:                    # Agents not returned by Zendesk search API
+    #   "12345678901234": "Agent Name"
+    # tech_merge_map:                  # Map Zendesk tech IDs to SuperOps tech IDs
+    #   "12345678901234": "superops:9876543210"
   halopsa:  # Pre-stub for future use
     api_url: https://INSTANCE.halopsa.com/api
     client_id: YOUR_CLIENT_ID
@@ -54,9 +58,9 @@ business_hours:
   holidays: []       # ISO dates like ["2026-01-01", "2026-12-25"]
 
 phone:
-  provider: mock          # Options: zoom, mock, none
+  provider: none          # Options: zoom, mock, none
   zoom:
-    account_id: YOUR_ZOOM_ACCOUNT_ID
+    account_id: YOUR_ZOOM_ACCOUNT_ID      # From Zoom Server-to-Server OAuth app
     client_id: YOUR_ZOOM_CLIENT_ID
     client_secret: YOUR_ZOOM_CLIENT_SECRET
 
