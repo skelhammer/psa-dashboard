@@ -157,6 +157,19 @@ async def _period_metrics(conn, start_iso: str, end_iso: str, extra_sql: str = "
         [start_iso, end_iso] + ep,
     )
 
+    # FCR (First Call Resolution) rate for closed tickets in period
+    fcr_total = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM tickets WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time < ?{extra}",
+        [start_iso, end_iso] + ep,
+    )
+    fcr_yes = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM tickets WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time < ? AND fcr = 1{extra}",
+        [start_iso, end_iso] + ep,
+    )
+    fcr_total_val = fcr_total[0][0] or 0
+    fcr_yes_val = fcr_yes[0][0] or 0
+    fcr_rate = round((fcr_yes_val / fcr_total_val * 100) if fcr_total_val > 0 else 0, 1)
+
     # Billing compliance: % of billable client tickets (resolved) with worklog > 0
     extra_t = extra.replace('client_id', 't.client_id').replace('technician_id', 't.technician_id').replace('priority', 't.priority').replace('category', 't.category').replace('tech_group_name', 't.tech_group_name')
     billable_total = await conn.execute_fetchall(
@@ -186,6 +199,7 @@ async def _period_metrics(conn, start_iso: str, end_iso: str, extra_sql: str = "
         "sla_compliance_pct": sla_pct,
         "total_worklog_hours": worklog_hours,
         "reopened_count": reopened[0][0] or 0,
+        "fcr_rate": fcr_rate,
         "billing_compliance_pct": billing_pct,
     }
 
@@ -248,7 +262,7 @@ async def executive_report(request: Request, filters: FilterParams = Depends()):
     compare_keys = [
         "tickets_created", "tickets_closed", "avg_first_response_minutes",
         "avg_resolution_minutes", "sla_compliance_pct", "total_worklog_hours",
-        "reopened_count", "billing_compliance_pct",
+        "reopened_count", "fcr_rate", "billing_compliance_pct",
     ]
     mom_change = {k: _pct_change(current[k], mom[k]) for k in compare_keys}
     yoy_change = {k: _pct_change(current[k], yoy[k]) for k in compare_keys}
@@ -414,12 +428,12 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
 
     # Top 10 clients by volume (selected period)
     top_clients = await conn.execute_fetchall(
-        f"""SELECT client_name, COUNT(*) as volume,
+        f"""SELECT COALESCE(client_name, 'Unassigned') as client_name, COUNT(*) as volume,
                    SUM(CASE WHEN sla_name IS NOT NULL AND (first_response_violated = 1 OR resolution_violated = 1) THEN 1 ELSE 0 END) as violated,
                    SUM(CASE WHEN sla_name IS NOT NULL THEN 1 ELSE 0 END) as sla_total
             FROM tickets
             WHERE created_time >= ? AND created_time < ?{extra}
-            GROUP BY client_name
+            GROUP BY COALESCE(client_name, 'Unassigned')
             ORDER BY volume DESC
             LIMIT 10""",
         [start_iso, end_iso] + extra_params,
@@ -430,7 +444,7 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
         sv = r["violated"] or 0
         sla_pct = round(((st - sv) / st * 100) if st > 0 else 100, 1)
         top_clients_data.append({
-            "name": r["client_name"],
+            "name": r["client_name"] or "Unassigned",
             "volume": r["volume"],
             "sla_pct": sla_pct,
         })
@@ -500,4 +514,77 @@ async def executive_charts(request: Request, filters: FilterParams = Depends()):
         "resolution_distribution": [{"bucket": k, "count": v} for k, v in buckets.items()],
         "billing_trend": billing_trend,
         "category_distribution": category_chart,
+    }
+
+
+@router.get("/executive/financials")
+async def executive_financials(request: Request, filters: FilterParams = Depends()):
+    """Portfolio-level profitability summary for the executive report."""
+    db = request.app.state.db
+    conn = await db.get_connection()
+    settings = get_settings()
+    tech_cost = settings.billing.tech_cost_per_hour
+
+    start = filters.date_from
+    end = filters.date_to
+    start_iso = start.isoformat()
+    end_iso = end.isoformat()
+
+    extra_sql, extra_params = _build_filter_sql(filters)
+    extra = f" AND {extra_sql}" if extra_sql else ""
+
+    async def _portfolio_metrics(s_iso: str, e_iso: str) -> dict:
+        """Compute portfolio financials for a given period."""
+        # Total monthly contract revenue (all active clients with contracts)
+        rev_row = await conn.execute_fetchall(
+            """SELECT SUM(bc.monthly_contract_value) FROM billing_config bc
+               JOIN clients c ON c.id = bc.client_id
+               WHERE c.stage = 'Active' AND bc.monthly_contract_value > 0"""
+        )
+        total_revenue = rev_row[0][0] or 0
+
+        # Total service cost = worklog hours * tech cost in period
+        cost_row = await conn.execute_fetchall(
+            f"SELECT SUM(worklog_hours) FROM tickets WHERE created_time >= ? AND created_time < ?{extra}",
+            [s_iso, e_iso] + extra_params,
+        )
+        total_hours = cost_row[0][0] or 0
+        total_service_cost = round(total_hours * tech_cost, 2)
+
+        # Tickets closed in period (for cost per ticket)
+        closed_row = await conn.execute_fetchall(
+            f"SELECT COUNT(*) FROM tickets WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time < ?{extra}",
+            [s_iso, e_iso] + extra_params,
+        )
+        tickets_closed = closed_row[0][0] or 0
+
+        # Compute derived metrics
+        blended_margin_pct = round(((total_revenue - total_service_cost) / total_revenue * 100) if total_revenue > 0 else 0, 1)
+        cost_per_ticket = round(total_service_cost / tickets_closed, 2) if tickets_closed > 0 else 0
+
+        return {
+            "total_revenue": round(total_revenue, 2),
+            "total_service_cost": total_service_cost,
+            "blended_margin_pct": blended_margin_pct,
+            "cost_per_ticket": cost_per_ticket,
+            "total_hours": round(total_hours, 1),
+            "tickets_closed": tickets_closed,
+        }
+
+    current = await _portfolio_metrics(start_iso, end_iso)
+
+    # MoM comparison
+    mom_start, mom_end = _prior_period(start, end)
+    prior = await _portfolio_metrics(mom_start.isoformat(), mom_end.isoformat())
+
+    comparison = {
+        "total_revenue_pct": _pct_change(current["total_revenue"], prior["total_revenue"]),
+        "blended_margin_pct": _pct_change(current["blended_margin_pct"], prior["blended_margin_pct"]),
+        "cost_per_ticket_pct": _pct_change(current["cost_per_ticket"], prior["cost_per_ticket"]),
+    }
+
+    return {
+        **current,
+        "comparison": comparison,
+        "date_range_label": filters.date_range_label,
     }

@@ -164,32 +164,45 @@ export function useExecutiveCharts(params?: Record<string, string>) {
   })
 }
 
+// Executive Financials
+export function useExecutiveFinancials(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['executive-financials', params],
+    queryFn: () => api.get('/executive/financials', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
+  })
+}
+
 // Phone Analytics
-export function usePhoneOverview(days: number = 30) {
+export function usePhoneOverview(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['phone-overview', days],
-    queryFn: () => api.get('/phone/overview', { params: { days } }).then(r => r.data),
+    queryKey: ['phone-overview', params],
+    queryFn: () => api.get('/phone/overview', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
-export function usePhoneCharts(days: number = 30) {
+export function usePhoneCharts(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['phone-charts', days],
-    queryFn: () => api.get('/phone/charts', { params: { days } }).then(r => r.data),
+    queryKey: ['phone-charts', params],
+    queryFn: () => api.get('/phone/charts', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
-export function usePhoneAgents(days: number = 30) {
+export function usePhoneAgents(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['phone-agents', days],
-    queryFn: () => api.get('/phone/agents', { params: { days } }).then(r => r.data),
+    queryKey: ['phone-agents', params],
+    queryFn: () => api.get('/phone/agents', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
-export function usePhoneQueues(days: number = 30) {
+export function usePhoneQueues(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['phone-queues', days],
-    queryFn: () => api.get('/phone/queues', { params: { days } }).then(r => r.data),
+    queryKey: ['phone-queues', params],
+    queryFn: () => api.get('/phone/queues', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -203,10 +216,11 @@ export function useAlerts() {
 }
 
 // Executive Summary (CEO)
-export function useExecutiveSummary() {
+export function useExecutiveSummary(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['executive-summary'],
-    queryFn: () => api.get('/executive/summary').then(r => r.data),
+    queryKey: ['executive-summary', params],
+    queryFn: () => api.get('/executive/summary', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -253,5 +267,55 @@ export function useResolveFlag() {
       qc.invalidateQueries({ queryKey: ['billing-summary'] })
       qc.invalidateQueries({ queryKey: ['manage-to-zero'] })
     },
+  })
+}
+
+// Phone Metrics
+export function usePhoneCallbackRate(params?: Record<string, string>, windowHours = 4) {
+  return useQuery({
+    queryKey: ['phone-callback-rate', params, windowHours],
+    queryFn: () => api.get('/phone/metrics/callback-rate', { params: { ...params, window_hours: windowHours } }).then(r => r.data),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function usePhonePeakHours(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['phone-peak-hours', params],
+    queryFn: () => api.get('/phone/metrics/peak-hours', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function usePhoneVoicemailResponse(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['phone-voicemail-response', params],
+    queryFn: () => api.get('/phone/metrics/voicemail-response', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function usePhoneWaitDistribution(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['phone-wait-distribution', params],
+    queryFn: () => api.get('/phone/metrics/wait-distribution', { params }).then(r => r.data),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function usePhoneDrilldown(metric: string | null, params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['phone-drilldown', metric, params],
+    queryFn: () => api.get(`/phone/drilldown/${metric}`, { params }).then(r => r.data),
+    enabled: !!metric,
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function usePhoneSyncStatus() {
+  return useQuery({
+    queryKey: ['phone-sync-status'],
+    queryFn: () => api.get('/phone/sync/status').then(r => r.data),
+    refetchInterval: 30000,
   })
 }

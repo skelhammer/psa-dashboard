@@ -1,4 +1,4 @@
-import { useExecutiveReport, useExecutiveCharts, useExecutiveSummary } from '../api/hooks'
+import { useExecutiveReport, useExecutiveCharts, useExecutiveSummary, useExecutiveFinancials, usePhoneOverview, usePhoneCharts } from '../api/hooks'
 import { useFilterContext } from '../context/FilterContext'
 import { formatDuration } from '../utils/formatting'
 import { BRAND, CHART_COLORS } from '../utils/constants'
@@ -8,7 +8,11 @@ import ExportButtons from '../components/ExportButtons'
 import InsightCard from '../components/InsightCard'
 import { exportMultiSectionCSV } from '../utils/export'
 import clsx from 'clsx'
-import { TrendingUp, TrendingDown, CircleCheck, AlertTriangle, CircleX } from 'lucide-react'
+import {
+  TrendingUp, TrendingDown, CircleCheck, AlertTriangle, CircleX,
+  DollarSign, Users,
+  BarChart3, Shield, Headphones,
+} from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, ComposedChart, ReferenceLine,
@@ -25,13 +29,14 @@ const tooltipStyle = {
 interface ExecKpiProps {
   label: string
   value: string | number
+  subtitle?: string
   mom?: number | null
   yoy?: number | null
   direction?: 'up-good' | 'down-good'
   colorClass?: string
 }
 
-function ExecKpiCard({ label, value, mom, yoy, direction, colorClass }: ExecKpiProps) {
+function ExecKpiCard({ label, value, subtitle, mom, yoy, direction, colorClass }: ExecKpiProps) {
   const changeIndicator = (pct: number | null | undefined, prefix: string) => {
     if (pct == null || pct === 0) return <span className="text-gray-600">{prefix}: --</span>
     const isPositive = pct > 0
@@ -62,6 +67,7 @@ function ExecKpiCard({ label, value, mom, yoy, direction, colorClass }: ExecKpiP
       <div className="relative">
         <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2.5">{label}</p>
         <p className="text-2xl font-bold tabular-nums tracking-tight text-white">{value}</p>
+        {subtitle && <p className="text-[11px] text-gray-500 mt-1">{subtitle}</p>}
         <div className="flex flex-col gap-0.5 mt-2 text-[11px] font-medium tabular-nums">
           {changeIndicator(mom, 'MoM')}
           {changeIndicator(yoy, 'YoY')}
@@ -94,12 +100,26 @@ const healthColors = {
   red: 'text-red-400 border-red-500/30 bg-red-500/5',
 }
 
+function SectionHeader({ icon: Icon, title, id }: { icon: React.ElementType; title: string; id: string }) {
+  return (
+    <div id={id} className="flex items-center gap-2.5 pt-4 pb-1">
+      <Icon size={16} className="text-gray-500" />
+      <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">{title}</h3>
+      <div className="flex-1 h-px bg-white/[0.06]" />
+    </div>
+  )
+}
+
+
 export default function ExecutiveReport() {
   const { toParams } = useFilterContext()
   const params = toParams()
   const { data: report, isLoading } = useExecutiveReport(params)
   const { data: charts } = useExecutiveCharts(params)
-  const { data: summary } = useExecutiveSummary()
+  const { data: summary } = useExecutiveSummary(params)
+  const { data: phoneData } = usePhoneOverview(params)
+  const { data: phoneCharts } = usePhoneCharts(params)
+  const { data: financials } = useExecutiveFinancials(params)
 
   if (isLoading && !report) {
     return <div className="text-gray-500">Loading executive report...</div>
@@ -122,11 +142,38 @@ export default function ExecutiveReport() {
           'SLA Compliance %': kpis.sla_compliance_pct,
           'Avg First Response': kpis.avg_first_response_minutes ? formatDuration(kpis.avg_first_response_minutes) : '-',
           'Avg Resolution': kpis.avg_resolution_minutes ? formatDuration(kpis.avg_resolution_minutes) : '-',
+          'FCR Rate %': kpis.fcr_rate ?? '-',
           'Worklog Hours': kpis.total_worklog_hours,
-          'Team Utilization %': kpis.team_utilization_pct,
+          'Logged Utilization %': kpis.team_utilization_pct,
           'Billing Compliance %': kpis.billing_compliance_pct,
           'Billing Flags': kpis.unresolved_billing_flags,
           'Reopened': kpis.reopened_count,
+        }],
+      })
+    }
+    if (phoneData && phoneData.total_calls > 0) {
+      sections.push({
+        name: 'Call Center Summary',
+        data: [{
+          'Total Calls': phoneData.total_calls,
+          'Answer Rate %': phoneData.answer_rate,
+          'Service Level (80/20) %': phoneData.service_level,
+          'Avg Speed of Answer (s)': phoneData.avg_wait_seconds,
+          'Abandoned Rate %': phoneData.abandoned_rate,
+          'Missed': phoneData.missed,
+          'Voicemail': phoneData.voicemail,
+        }],
+      })
+    }
+    if (financials && financials.total_revenue > 0) {
+      sections.push({
+        name: 'Financial Summary',
+        data: [{
+          'Monthly Revenue': financials.total_revenue,
+          'Total Service Cost': financials.total_service_cost,
+          'Blended Margin %': financials.blended_margin_pct,
+          'Cost per Ticket': financials.cost_per_ticket,
+          'Total Hours': financials.total_hours,
         }],
       })
     }
@@ -139,6 +186,9 @@ export default function ExecutiveReport() {
     if (charts?.category_distribution?.length) sections.push({ name: 'Top Categories', data: charts.category_distribution })
     exportMultiSectionCSV(sections, 'executive_report')
   }
+
+  const hasPhoneData = phoneData && phoneData.total_calls > 0
+  const phoneComparison = phoneData?.comparison
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -181,6 +231,28 @@ export default function ExecutiveReport() {
                       {h.close_change_pct >= 0 ? '+' : ''}{h.close_change_pct}% MoM
                     </span>
                   </div>
+                  {hasPhoneData && (
+                    <div>
+                      <span className="text-gray-400">Answer Rate: </span>
+                      <span className={clsx('font-bold',
+                        phoneData.answer_rate >= 90 ? 'text-emerald-400' :
+                        phoneData.answer_rate >= 80 ? 'text-yellow-400' : 'text-red-400'
+                      )}>
+                        {phoneData.answer_rate}%
+                      </span>
+                    </div>
+                  )}
+                  {financials && financials.total_revenue > 0 && (
+                    <div>
+                      <span className="text-gray-400">Margin: </span>
+                      <span className={clsx('font-bold',
+                        financials.blended_margin_pct >= 40 ? 'text-emerald-400' :
+                        financials.blended_margin_pct >= 20 ? 'text-yellow-400' : 'text-red-400'
+                      )}>
+                        {financials.blended_margin_pct}%
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -197,7 +269,9 @@ export default function ExecutiveReport() {
         </div>
       )}
 
-      {/* KPI Scoreboard */}
+      {/* ─── SERVICE DELIVERY ─── */}
+      <SectionHeader icon={Shield} title="Service Delivery" id="service-delivery" />
+
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <ExecKpiCard
           label="Tickets Created"
@@ -246,40 +320,19 @@ export default function ExecutiveReport() {
           yoy={yoy?.avg_resolution_minutes}
           direction="down-good"
         />
-        <ExecKpiCard
-          label="Worklog Hours"
-          value={kpis?.total_worklog_hours ?? '-'}
-          mom={mom?.total_worklog_hours}
-          yoy={yoy?.total_worklog_hours}
-          direction="up-good"
-        />
-        <ExecKpiCard
-          label="Team Utilization"
-          value={`${kpis?.team_utilization_pct ?? '-'}%`}
-          colorClass={
-            kpis?.team_utilization_pct != null ? (
-              kpis.team_utilization_pct >= 60 && kpis.team_utilization_pct <= 85
-                ? 'border-emerald-500/30'
-                : kpis.team_utilization_pct > 85 ? 'border-red-500/30' : 'border-yellow-500/30'
-            ) : 'border-white/[0.08]'
-          }
-        />
-        <ExecKpiCard
-          label="Billing Compliance"
-          value={`${kpis?.billing_compliance_pct ?? '-'}%`}
-          mom={mom?.billing_compliance_pct}
-          yoy={yoy?.billing_compliance_pct}
-          direction="up-good"
-          colorClass={
-            (kpis?.billing_compliance_pct ?? 100) >= 95 ? 'border-emerald-500/30' :
-            (kpis?.billing_compliance_pct ?? 100) >= 80 ? 'border-yellow-500/30' : 'border-red-500/30'
-          }
-        />
-        <ExecKpiCard
-          label="Billing Flags"
-          value={kpis?.unresolved_billing_flags ?? 0}
-          colorClass={(kpis?.unresolved_billing_flags ?? 0) > 0 ? 'border-red-500/30' : 'border-white/[0.08]'}
-        />
+        {kpis?.fcr_rate != null && (
+          <ExecKpiCard
+            label="First Call Resolution"
+            value={`${kpis.fcr_rate}%`}
+            mom={mom?.fcr_rate}
+            yoy={yoy?.fcr_rate}
+            direction="up-good"
+            colorClass={
+              kpis.fcr_rate >= 70 ? 'border-emerald-500/30' :
+              kpis.fcr_rate >= 50 ? 'border-yellow-500/30' : 'border-red-500/30'
+            }
+          />
+        )}
         <ExecKpiCard
           label="Reopened Tickets"
           value={kpis?.reopened_count ?? 0}
@@ -290,7 +343,7 @@ export default function ExecutiveReport() {
         />
       </div>
 
-      {/* Charts Row 1 */}
+      {/* Service Delivery Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Ticket Volume: Year over Year" exportData={charts?.volume_comparison} exportFilename="volume_yoy">
           <ResponsiveContainer width="100%" height={280}>
@@ -323,41 +376,175 @@ export default function ExecutiveReport() {
         </ChartCard>
       </div>
 
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Backlog Trend" exportData={charts?.backlog_trend} exportFilename="backlog_trend">
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={charts?.backlog_trend || []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <Tooltip {...tooltipStyle} />
-              <Legend wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
-              <Bar dataKey="opened" fill="#60A5FA" radius={[2, 2, 0, 0]} name="Opened" />
-              <Bar dataKey="closed" fill="#34D399" radius={[2, 2, 0, 0]} name="Closed" />
-              <Line type="monotone" dataKey="open_count" stroke="#F87171" strokeWidth={2} dot={false} name="Open Backlog" />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </ChartCard>
+      <ChartCard title="Backlog Trend" exportData={charts?.backlog_trend} exportFilename="backlog_trend">
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={charts?.backlog_trend || []}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} />
+            <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
+            <Tooltip {...tooltipStyle} />
+            <Legend wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
+            <Bar dataKey="opened" fill="#60A5FA" radius={[2, 2, 0, 0]} name="Opened" />
+            <Bar dataKey="closed" fill="#34D399" radius={[2, 2, 0, 0]} name="Closed" />
+            <Line type="monotone" dataKey="open_count" stroke="#F87171" strokeWidth={2} dot={false} name="Open Backlog" />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </ChartCard>
 
-        <ChartCard title="Resolution Time Distribution" exportData={charts?.resolution_distribution} exportFilename="resolution_dist">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={charts?.resolution_distribution || []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#9ca3af' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <Tooltip {...tooltipStyle} />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {(charts?.resolution_distribution || []).map((_: any, i: number) => (
-                  <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
+      {/* ─── CALL CENTER ─── */}
+      {hasPhoneData && (
+        <>
+          <SectionHeader icon={Headphones} title="Call Center" id="call-center" />
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <ExecKpiCard
+              label="Answer Rate"
+              value={`${phoneData.answer_rate}%`}
+              mom={phoneComparison?.answer_rate_pct}
+              direction="up-good"
+              colorClass={
+                phoneData.answer_rate >= 90 ? 'border-emerald-500/30' :
+                phoneData.answer_rate >= 80 ? 'border-yellow-500/30' : 'border-red-500/30'
+              }
+            />
+            <ExecKpiCard
+              label="Service Level (80/20)"
+              value={`${phoneData.service_level}%`}
+              mom={phoneComparison?.service_level_pct}
+              direction="up-good"
+              colorClass={
+                phoneData.service_level >= 80 ? 'border-emerald-500/30' :
+                phoneData.service_level >= 70 ? 'border-yellow-500/30' : 'border-red-500/30'
+              }
+            />
+            <ExecKpiCard
+              label="Avg Speed of Answer"
+              value={`${phoneData.avg_wait_seconds}s`}
+              mom={phoneComparison?.avg_wait_pct}
+              direction="down-good"
+              colorClass={
+                phoneData.avg_wait_seconds <= 20 ? 'border-emerald-500/30' :
+                phoneData.avg_wait_seconds <= 30 ? 'border-yellow-500/30' : 'border-red-500/30'
+              }
+            />
+            <ExecKpiCard
+              label="Abandoned Rate"
+              value={`${phoneData.abandoned_rate}%`}
+              mom={phoneComparison?.abandoned_rate_pct}
+              direction="down-good"
+              colorClass={
+                phoneData.abandoned_rate <= 3 ? 'border-emerald-500/30' :
+                phoneData.abandoned_rate <= 5 ? 'border-yellow-500/30' : 'border-red-500/30'
+              }
+            />
+          </div>
+
+          {phoneCharts?.daily_trend?.length > 0 && (
+            <ChartCard title="Call Volume Trend" exportData={phoneCharts.daily_trend} exportFilename="call_volume_trend">
+              <ResponsiveContainer width="100%" height={280}>
+                <ComposedChart data={phoneCharts.daily_trend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} />
+                  <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
+                  <Tooltip {...tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
+                  <Bar dataKey="inbound" fill="#60A5FA" radius={[2, 2, 0, 0]} name="Inbound" />
+                  <Bar dataKey="outbound" fill="#818CF8" radius={[2, 2, 0, 0]} name="Outbound" />
+                  <Line type="monotone" dataKey="answered" stroke="#34D399" strokeWidth={2} dot={false} name="Answered" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          )}
+        </>
+      )}
+
+      {/* ─── FINANCIAL HEALTH ─── */}
+      <SectionHeader icon={DollarSign} title="Financial Health" id="financial-health" />
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {financials && financials.total_revenue > 0 && (
+          <ExecKpiCard
+            label="Monthly Revenue"
+            value={`$${(financials.total_revenue / 1000).toFixed(1)}k`}
+            mom={financials.comparison?.total_revenue_pct}
+            direction="up-good"
+          />
+        )}
+        {financials && financials.total_revenue > 0 && (
+          <ExecKpiCard
+            label="Blended Margin"
+            value={`${financials.blended_margin_pct}%`}
+            mom={financials.comparison?.blended_margin_pct}
+            direction="up-good"
+            colorClass={
+              financials.blended_margin_pct >= 40 ? 'border-emerald-500/30' :
+              financials.blended_margin_pct >= 20 ? 'border-yellow-500/30' : 'border-red-500/30'
+            }
+          />
+        )}
+        {financials && financials.cost_per_ticket > 0 && (
+          <ExecKpiCard
+            label="Cost per Ticket"
+            value={`$${financials.cost_per_ticket.toFixed(0)}`}
+            mom={financials.comparison?.cost_per_ticket_pct}
+            direction="down-good"
+          />
+        )}
+        <ExecKpiCard
+          label="Worklog Hours"
+          value={kpis?.total_worklog_hours ?? '-'}
+          mom={mom?.total_worklog_hours}
+          yoy={yoy?.total_worklog_hours}
+          direction="up-good"
+        />
+        <ExecKpiCard
+          label="Billing Compliance"
+          value={`${kpis?.billing_compliance_pct ?? '-'}%`}
+          subtitle={(kpis?.unresolved_billing_flags ?? 0) > 0
+            ? `${kpis.unresolved_billing_flags} unresolved flag${kpis.unresolved_billing_flags !== 1 ? 's' : ''}`
+            : undefined
+          }
+          mom={mom?.billing_compliance_pct}
+          yoy={yoy?.billing_compliance_pct}
+          direction="up-good"
+          colorClass={
+            (kpis?.billing_compliance_pct ?? 100) >= 95 ? 'border-emerald-500/30' :
+            (kpis?.billing_compliance_pct ?? 100) >= 80 ? 'border-yellow-500/30' : 'border-red-500/30'
+          }
+        />
       </div>
 
-      {/* Team Performance Table */}
+      <ChartCard title="Billing Compliance Trend" exportData={charts?.billing_trend} exportFilename="billing_trend">
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={charts?.billing_trend || []}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} />
+            <YAxis domain={['dataMin - 5', 100]} tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={(v: number) => `${v}%`} />
+            <Tooltip {...tooltipStyle} formatter={(v: number) => `${v}%`} />
+            <ReferenceLine y={95} stroke="#34D399" strokeDasharray="3 3" label={{ value: "95% Target", fill: "#34D399", fontSize: 10, position: "insideTopRight" }} />
+            <Line type="monotone" dataKey="compliance_pct" stroke="#F59E0B" strokeWidth={2} dot={{ fill: '#F59E0B', r: 3 }} name="Billing %" />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      {/* ─── TEAM & CAPACITY ─── */}
+      <SectionHeader icon={Users} title="Team & Capacity" id="team-capacity" />
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <ExecKpiCard
+          label="Logged Utilization"
+          value={`${kpis?.team_utilization_pct ?? '-'}%`}
+          subtitle="Based on logged worklog hours"
+          colorClass={
+            kpis?.team_utilization_pct != null ? (
+              kpis.team_utilization_pct >= 60 && kpis.team_utilization_pct <= 85
+                ? 'border-emerald-500/30'
+                : kpis.team_utilization_pct > 85 ? 'border-red-500/30' : 'border-yellow-500/30'
+            ) : 'border-white/[0.08]'
+          }
+        />
+      </div>
+
       <ChartCard title="Team Performance Summary" exportData={charts?.team_summary} exportFilename="team_performance">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -395,17 +582,45 @@ export default function ExecutiveReport() {
         </div>
       </ChartCard>
 
-      {/* Charts Row 3 */}
+      {/* ─── CLIENT INTELLIGENCE ─── */}
+      <SectionHeader icon={BarChart3} title="Client Intelligence" id="client-intelligence" />
+
+      <ChartCard title="Top Clients by Volume" exportData={charts?.top_clients} exportFilename="top_clients">
+        <ResponsiveContainer width="100%" height={Math.max(300, (charts?.top_clients?.length || 0) * 40 + 30)}>
+          <BarChart data={charts?.top_clients || []} layout="vertical" margin={{ top: 10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
+            <YAxis
+              dataKey="name"
+              type="category"
+              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              width={220}
+              interval={0}
+              tickFormatter={(name: string) => name.length > 28 ? name.slice(0, 26) + '...' : name}
+            />
+            <Tooltip {...tooltipStyle} />
+            <Bar dataKey="volume" radius={[0, 4, 4, 0]}>
+              {(charts?.top_clients || []).map((_: any, i: number) => (
+                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      {/* ─── OPERATIONAL DETAIL ─── */}
+      <SectionHeader icon={BarChart3} title="Operational Detail" id="operational-detail" />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Top Clients by Volume" exportData={charts?.top_clients} exportFilename="top_clients">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={charts?.top_clients || []} layout="vertical">
+        <ChartCard title="Resolution Time Distribution" exportData={charts?.resolution_distribution} exportFilename="resolution_dist">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={charts?.resolution_distribution || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#9ca3af' }} width={140} />
+              <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#9ca3af' }} />
+              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
               <Tooltip {...tooltipStyle} />
-              <Bar dataKey="volume" radius={[0, 4, 4, 0]}>
-                {(charts?.top_clients || []).map((_: any, i: number) => (
+              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {(charts?.resolution_distribution || []).map((_: any, i: number) => (
                   <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                 ))}
               </Bar>
@@ -413,32 +628,18 @@ export default function ExecutiveReport() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Billing Compliance Trend" exportData={charts?.billing_trend} exportFilename="billing_trend">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={charts?.billing_trend || []}>
+        <ChartCard title="Top Categories" exportData={charts?.category_distribution} exportFilename="category_distribution">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={charts?.category_distribution || []} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis domain={['dataMin - 5', 100]} tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={(v: number) => `${v}%`} />
-              <Tooltip {...tooltipStyle} formatter={(v: number) => `${v}%`} />
-              <ReferenceLine y={95} stroke="#34D399" strokeDasharray="3 3" label={{ value: "95% Target", fill: "#34D399", fontSize: 10, position: "insideTopRight" }} />
-              <Line type="monotone" dataKey="compliance_pct" stroke="#F59E0B" strokeWidth={2} dot={{ fill: '#F59E0B', r: 3 }} name="Billing %" />
-            </LineChart>
+              <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
+              <YAxis dataKey="category" type="category" tick={{ fontSize: 11, fill: '#9ca3af' }} width={120} />
+              <Tooltip {...tooltipStyle} />
+              <Bar dataKey="count" fill={BRAND.primary} radius={[0, 4, 4, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
-
-      {/* Top Categories */}
-      <ChartCard title="Top Categories" exportData={charts?.category_distribution} exportFilename="category_distribution">
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={charts?.category_distribution || []} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
-            <YAxis dataKey="category" type="category" tick={{ fontSize: 11, fill: '#9ca3af' }} width={120} />
-            <Tooltip {...tooltipStyle} />
-            <Bar dataKey="count" fill={BRAND.primary} radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
 
       {/* Footer */}
       <div className="text-center text-[11px] text-gray-600 py-4 border-t border-white/[0.04]">
