@@ -61,6 +61,7 @@ def ticket_row_to_dict(row) -> dict:
         "priority": row["priority"],
         "category": row["category"],
         "subcategory": row["subcategory"],
+        "tech_group_name": row["tech_group_name"] if "tech_group_name" in row.keys() else None,
         "sla_name": row["sla_name"],
         "created_time": row["created_time"],
         "updated_time": row["updated_time"],

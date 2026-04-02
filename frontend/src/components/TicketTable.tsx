@@ -2,7 +2,7 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import { PRIORITY_COLORS, STATUS_COLORS } from '../utils/constants'
 import { formatAge, formatWorklogHours } from '../utils/formatting'
-import { ChevronUp, ChevronDown, Inbox } from 'lucide-react'
+import { ChevronUp, ChevronDown, Inbox, CircleDot } from 'lucide-react'
 import SlaCountdown from './SlaCountdown'
 
 interface Ticket {
@@ -16,6 +16,7 @@ interface Ticket {
   created_time: string
   updated_time: string
   first_response_due?: string | null
+  first_response_time?: string | null
   first_response_violated?: boolean | null
   resolution_due?: string | null
   resolution_violated?: boolean | null
@@ -24,6 +25,12 @@ interface Ticket {
   url?: string
   rank?: number
   score?: number
+  last_responder_type?: string | null
+  reopened?: boolean
+  category?: string | null
+  tech_group_name?: string | null
+  conversation_count?: number
+  tech_reply_count?: number
 }
 
 interface Column {
@@ -37,7 +44,21 @@ interface TicketTableProps {
   tickets: Ticket[]
   showRank?: boolean
   showScore?: boolean
+  showLastResponder?: boolean
+  showCategory?: boolean
+  showTechGroup?: boolean
   emptyMessage?: string
+  defaultSortKey?: string
+  defaultSortDir?: 'asc' | 'desc'
+}
+
+function getSlaSortValue(ticket: Ticket): number {
+  if (ticket.first_response_violated || ticket.resolution_violated) return -Infinity
+  const frApplies = ticket.first_response_due && !ticket.first_response_time
+  const frDue = frApplies ? new Date(ticket.first_response_due!).getTime() : Infinity
+  const resDue = ticket.resolution_due ? new Date(ticket.resolution_due).getTime() : Infinity
+  const nearest = Math.min(frDue, resDue)
+  return nearest === Infinity ? Infinity : nearest
 }
 
 const defaultColumns: Column[] = [
@@ -112,7 +133,7 @@ const defaultColumns: Column[] = [
   {
     key: 'sla',
     label: 'SLA',
-    sortable: false,
+    sortable: true,
     render: (t) => <SlaCountdown ticket={t} />,
   },
   {
@@ -127,15 +148,77 @@ const defaultColumns: Column[] = [
   },
 ]
 
+// Optional columns
+const lastResponderColumn: Column = {
+  key: 'last_responder_type',
+  label: 'Ball',
+  sortable: true,
+  render: (t) => {
+    if (t.last_responder_type === 'requester') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-orange-400" title="Customer waiting for tech reply">
+          <CircleDot size={12} className="fill-orange-400/30" />
+          <span className="hidden xl:inline">Cust</span>
+        </span>
+      )
+    }
+    if (t.last_responder_type === 'tech') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-green-400" title="Tech replied, waiting on customer">
+          <CircleDot size={12} className="fill-green-400/30" />
+          <span className="hidden xl:inline">Tech</span>
+        </span>
+      )
+    }
+    return <span className="text-xs text-gray-600">-</span>
+  },
+}
+
+const categoryColumn: Column = {
+  key: 'category',
+  label: 'Category',
+  sortable: true,
+  render: (t) => (
+    <span className="text-xs text-gray-400">{t.category || '-'}</span>
+  ),
+}
+
+const techGroupColumn: Column = {
+  key: 'tech_group_name',
+  label: 'Group',
+  sortable: true,
+  render: (t) => (
+    <span className="text-xs text-gray-400">{t.tech_group_name || '-'}</span>
+  ),
+}
+
 type SortDir = 'asc' | 'desc'
 
 const PRIORITY_WEIGHT: Record<string, number> = {
   Critical: 5, Urgent: 5, High: 4, Medium: 3, Low: 2, 'Very Low': 1,
 }
 
-export default function TicketTable({ tickets, showRank, showScore, emptyMessage }: TicketTableProps) {
-  const [sortKey, setSortKey] = useState<string>('priority')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+export default function TicketTable({ tickets, showRank, showScore, showLastResponder, showCategory, showTechGroup, emptyMessage, defaultSortKey, defaultSortDir }: TicketTableProps) {
+  const [sortKey, setSortKey] = useState<string>(defaultSortKey || 'priority')
+  const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir || 'desc')
+
+  // Build columns list based on props
+  const columns: Column[] = [...defaultColumns]
+  if (showLastResponder) {
+    // Insert after status column
+    const statusIdx = columns.findIndex(c => c.key === 'status')
+    columns.splice(statusIdx + 1, 0, lastResponderColumn)
+  }
+  if (showTechGroup) {
+    // Insert after tech column
+    const techIdx = columns.findIndex(c => c.key === 'technician_name')
+    columns.splice(techIdx + 1, 0, techGroupColumn)
+  }
+  if (showCategory) {
+    // Insert before age column
+    const ageIdx = columns.findIndex(c => c.key === 'age')
+    columns.splice(ageIdx, 0, categoryColumn)
+  }
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -155,6 +238,9 @@ export default function TicketTable({ tickets, showRank, showScore, emptyMessage
     } else if (sortKey === 'age') {
       aVal = new Date(a.created_time).getTime()
       bVal = new Date(b.created_time).getTime()
+    } else if (sortKey === 'sla') {
+      aVal = getSlaSortValue(a)
+      bVal = getSlaSortValue(b)
     } else {
       aVal = (a as any)[sortKey] ?? ''
       bVal = (b as any)[sortKey] ?? ''
@@ -182,7 +268,7 @@ export default function TicketTable({ tickets, showRank, showScore, emptyMessage
         <thead>
           <tr className="bg-[#111113] border-b border-white/[0.08]">
             {showRank && <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">#</th>}
-            {defaultColumns.map(col => (
+            {columns.map(col => (
               <th
                 key={col.key}
                 onClick={() => col.sortable && handleSort(col.key)}
@@ -205,28 +291,43 @@ export default function TicketTable({ tickets, showRank, showScore, emptyMessage
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.04]">
-          {sorted.map((ticket, i) => (
-            <tr
-              key={ticket.id}
-              className="hover:bg-white/[0.03] transition-colors"
-            >
-              {showRank && (
-                <td className="px-4 py-3 text-xs text-gray-500 font-mono">
-                  {ticket.rank ?? i + 1}
-                </td>
-              )}
-              {defaultColumns.map(col => (
-                <td key={col.key} className="px-4 py-3 max-w-[250px] truncate">
-                  {col.render ? col.render(ticket) : (ticket as any)[col.key]}
-                </td>
-              ))}
-              {showScore && (
-                <td className="px-4 py-3 text-xs text-gray-500 font-mono tabular-nums">
-                  {ticket.score?.toFixed(0)}
-                </td>
-              )}
-            </tr>
-          ))}
+          {sorted.map((ticket, i) => {
+            const score = ticket.score ?? 0
+            const urgencyBand = score >= 1000
+              ? 'border-l-2 border-l-red-500/60 bg-red-500/[0.03]'
+              : score >= 500
+                ? 'border-l-2 border-l-yellow-500/40 bg-yellow-500/[0.02]'
+                : ''
+
+            return (
+              <tr
+                key={ticket.id}
+                className={clsx('hover:bg-white/[0.03] transition-colors', urgencyBand)}
+              >
+                {showRank && (
+                  <td className="px-4 py-3 text-xs text-gray-500 font-mono">
+                    {ticket.rank ?? i + 1}
+                  </td>
+                )}
+                {columns.map(col => (
+                  <td key={col.key} className={clsx('px-4 py-3', col.key === 'subject' && 'max-w-[250px] truncate')}>
+                    {col.render ? col.render(ticket) : (ticket as any)[col.key]}
+                  </td>
+                ))}
+                {showScore && (
+                  <td className="px-4 py-3 text-xs font-mono tabular-nums">
+                    <span className={clsx(
+                      score >= 1000 ? 'text-red-400' :
+                      score >= 500 ? 'text-yellow-400' :
+                      score >= 200 ? 'text-orange-300' : 'text-gray-500'
+                    )}>
+                      {score.toFixed(0)}
+                    </span>
+                  </td>
+                )}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

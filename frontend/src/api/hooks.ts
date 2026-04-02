@@ -84,11 +84,29 @@ export function useMtzDrilldown(cardType: string | null, params?: Record<string,
   })
 }
 
+export function useMtzTrends(hours = 8) {
+  return useQuery({
+    queryKey: ['mtz-trends', hours],
+    queryFn: () => api.get('/manage-to-zero/trends', { params: { hours } }).then(r => r.data),
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+  })
+}
+
 // Work Queue
 export function useWorkQueue(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['work-queue', params],
     queryFn: () => api.get('/work-queue', { params }).then(r => r.data),
+    refetchInterval: 30_000,
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useWorkQueueStats(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['work-queue-stats', params],
+    queryFn: () => api.get('/work-queue/stats', { params }).then(r => r.data),
     refetchInterval: 30_000,
     placeholderData: keepPreviousData,
   })
