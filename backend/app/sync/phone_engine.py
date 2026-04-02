@@ -20,6 +20,7 @@ class PhoneSyncEngine:
         self.lookback_days = lookback_days
         self._last_sync_time: datetime | None = None
         self._is_syncing = False
+        self._last_sync_result: dict | None = None
 
     @property
     def is_syncing(self) -> bool:
@@ -28,6 +29,14 @@ class PhoneSyncEngine:
     @property
     def last_sync_time(self) -> datetime | None:
         return self._last_sync_time
+
+    def get_sync_status(self) -> dict:
+        """Return current sync status for API consumers."""
+        return {
+            "is_syncing": self._is_syncing,
+            "last_sync_time": self._last_sync_time.isoformat() if self._last_sync_time else None,
+            "last_sync_result": self._last_sync_result,
+        }
 
     async def sync(self) -> dict:
         """Run phone data sync."""
@@ -72,16 +81,30 @@ class PhoneSyncEngine:
                 logger.error(msg)
                 errors.append(msg)
 
-            await conn.commit()
-
-            # Aggregate daily stats
+            # Mark internal calls (agent-to-agent) after users and calls are synced
             try:
-                await self._aggregate_daily_stats(conn)
-                await conn.commit()
+                await self._mark_internal_calls(conn)
             except Exception as e:
-                msg = f"Failed to aggregate phone stats: {e}"
+                msg = f"Failed to mark internal calls: {e}"
                 logger.error(msg)
                 errors.append(msg)
+
+            await conn.commit()
+
+            # Aggregate daily stats (skip if call log sync failed to avoid wiping good data)
+            call_log_failed = any("Failed to sync call logs" in e for e in errors)
+            if call_log_failed:
+                logger.warning(
+                    "Skipping daily stats aggregation; call log sync had errors"
+                )
+            else:
+                try:
+                    await self._aggregate_daily_stats(conn)
+                    await conn.commit()
+                except Exception as e:
+                    msg = f"Failed to aggregate phone stats: {e}"
+                    logger.error(msg)
+                    errors.append(msg)
 
             self._last_sync_time = datetime.now()
 
@@ -93,12 +116,15 @@ class PhoneSyncEngine:
         finally:
             self._is_syncing = False
 
-        return {
+        result = {
             "status": "completed" if not errors else "completed_with_errors",
             "calls_synced": calls_synced,
             "errors": errors,
             "duration_seconds": (datetime.now() - started_at).total_seconds(),
+            "timestamp": datetime.now().isoformat(),
         }
+        self._last_sync_result = result
+        return result
 
     async def _sync_call_logs(
         self, conn: aiosqlite.Connection, from_date: datetime, to_date: datetime
@@ -164,6 +190,32 @@ class PhoneSyncEngine:
                 (queue.id, queue.name, queue.extension, queue.member_count, now),
             )
 
+    async def _mark_internal_calls(self, conn: aiosqlite.Connection) -> None:
+        """Detect internal calls where both caller and callee are phone users."""
+        # Build set of known extensions
+        cursor = await conn.execute(
+            "SELECT extension FROM phone_users WHERE extension IS NOT NULL AND extension != ''"
+        )
+        rows = await cursor.fetchall()
+        extensions = {r[0] for r in rows}
+        if not extensions:
+            return
+
+        # Reset all, then mark internal where both ends match a known extension
+        await conn.execute("UPDATE phone_calls SET is_internal = 0 WHERE is_internal = 1")
+        placeholders = ",".join("?" for _ in extensions)
+        ext_list = list(extensions)
+        await conn.execute(
+            f"""UPDATE phone_calls SET is_internal = 1
+                WHERE caller_number IN ({placeholders})
+                  AND callee_number IN ({placeholders})""",
+            ext_list + ext_list,
+        )
+        cursor = await conn.execute("SELECT changes()")
+        changes = (await cursor.fetchone())[0]
+        if changes:
+            logger.info("Marked %d internal calls", changes)
+
     async def _aggregate_daily_stats(self, conn: aiosqlite.Connection) -> None:
         """Aggregate call data into phone_agent_daily table."""
         await conn.execute("DELETE FROM phone_agent_daily")
@@ -172,6 +224,7 @@ class PhoneSyncEngine:
                 date, user_id, user_email,
                 total_calls, inbound_calls, outbound_calls,
                 answered_calls, missed_calls, voicemail_calls,
+                abandoned_calls,
                 total_talk_seconds, total_wait_seconds, total_hold_seconds,
                 avg_handle_seconds
             )
@@ -185,6 +238,7 @@ class PhoneSyncEngine:
                 SUM(CASE WHEN result = 'connected' THEN 1 ELSE 0 END),
                 SUM(CASE WHEN result = 'missed' THEN 1 ELSE 0 END),
                 SUM(CASE WHEN result = 'voicemail' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN result = 'abandoned' THEN 1 ELSE 0 END),
                 SUM(CASE WHEN result = 'connected' THEN duration ELSE 0 END),
                 SUM(wait_time),
                 SUM(hold_time),

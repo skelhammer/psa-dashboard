@@ -24,7 +24,7 @@ interface FilterContextType {
 }
 
 const defaults: FilterState = {
-  dateRange: 'this_month',
+  dateRange: 'last_30',
   dateFrom: '',
   dateTo: '',
   clientId: '',
@@ -34,7 +34,7 @@ const defaults: FilterState = {
   category: '',
   techGroup: '',
   provider: '',
-  showCorp: true,
+  showCorp: false,
 }
 
 const FilterContext = createContext<FilterContextType | null>(null)

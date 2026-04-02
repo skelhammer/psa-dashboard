@@ -141,7 +141,12 @@ INSERT OR IGNORE INTO dashboard_config (key, value) VALUES
     ('work_queue_priority_high_weight', '75'),
     ('work_queue_priority_medium_weight', '50'),
     ('work_queue_priority_low_weight', '25'),
-    ('work_queue_age_weight_per_hour', '1');
+    ('work_queue_age_weight_per_hour', '1'),
+    ('mtz_yellow_pct', '2'),
+    ('mtz_red_pct', '5'),
+    ('mtz_yellow_floor', '2'),
+    ('mtz_red_floor', '5'),
+    ('stale_exclude_statuses', 'Waiting on Customer,Waiting on Vendor,Scheduled');
 
 CREATE INDEX IF NOT EXISTS idx_tickets_provider ON tickets(provider);
 CREATE INDEX IF NOT EXISTS idx_tickets_fr_biz_min ON tickets(first_response_business_minutes);
@@ -179,6 +184,7 @@ CREATE TABLE IF NOT EXISTS phone_calls (
     has_voicemail INTEGER DEFAULT 0,
     matched_client_id TEXT,
     matched_ticket_id TEXT,
+    is_internal INTEGER DEFAULT 0,
     synced_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -210,6 +216,7 @@ CREATE TABLE IF NOT EXISTS phone_agent_daily (
     answered_calls INTEGER DEFAULT 0,
     missed_calls INTEGER DEFAULT 0,
     voicemail_calls INTEGER DEFAULT 0,
+    abandoned_calls INTEGER DEFAULT 0,
     total_talk_seconds INTEGER DEFAULT 0,
     total_wait_seconds INTEGER DEFAULT 0,
     total_hold_seconds INTEGER DEFAULT 0,
@@ -222,6 +229,20 @@ CREATE INDEX IF NOT EXISTS idx_phone_calls_user_id ON phone_calls(user_id);
 CREATE INDEX IF NOT EXISTS idx_phone_calls_queue_id ON phone_calls(queue_id);
 CREATE INDEX IF NOT EXISTS idx_phone_calls_result ON phone_calls(result);
 CREATE INDEX IF NOT EXISTS idx_phone_agent_daily_date ON phone_agent_daily(date);
+CREATE INDEX IF NOT EXISTS idx_phone_calls_caller_inbound ON phone_calls(caller_number, direction, start_time);
+CREATE INDEX IF NOT EXISTS idx_phone_calls_sl ON phone_calls(direction, result, wait_time);
+CREATE INDEX IF NOT EXISTS idx_phone_calls_internal ON phone_calls(is_internal);
+
+-- Manage to Zero trend snapshots
+CREATE TABLE IF NOT EXISTS mtz_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,
+    card_key TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_mtz_snapshots_recorded ON mtz_snapshots(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_mtz_snapshots_card ON mtz_snapshots(card_key, recorded_at);
 
 -- Alerts and metric snapshots
 CREATE TABLE IF NOT EXISTS alerts (
@@ -259,6 +280,11 @@ MIGRATIONS = [
     "ALTER TABLE technicians ADD COLUMN provider TEXT NOT NULL DEFAULT 'superops'",
     "ALTER TABLE clients ADD COLUMN provider TEXT NOT NULL DEFAULT 'superops'",
     "ALTER TABLE client_contracts ADD COLUMN provider TEXT NOT NULL DEFAULT 'superops'",
+    # Phone analytics enhancements
+    "ALTER TABLE phone_calls ADD COLUMN is_internal INTEGER DEFAULT 0",
+    "ALTER TABLE phone_agent_daily ADD COLUMN abandoned_calls INTEGER DEFAULT 0",
+    # First Call Resolution custom field
+    "ALTER TABLE tickets ADD COLUMN fcr INTEGER NOT NULL DEFAULT 0",
 ]
 
 

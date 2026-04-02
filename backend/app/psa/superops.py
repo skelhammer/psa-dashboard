@@ -63,6 +63,7 @@ query getTicketList($input: ListInfoInput!) {
             category
             subcategory
             worklogTimespent
+            customFields
         }
         listInfo {
             page
@@ -197,6 +198,13 @@ def _map_ticket(raw: dict) -> Ticket:
     tech_group = raw.get("techGroup") if isinstance(raw.get("techGroup"), dict) else None
     sla = raw.get("sla") if isinstance(raw.get("sla"), dict) else None
 
+    # Extract FCR (First Call Resolution) from custom fields (udf18radio = Yes/No)
+    custom_fields = raw.get("customFields") or {}
+    if not isinstance(custom_fields, dict):
+        custom_fields = {}
+    fcr_value = custom_fields.get("udf18radio", "")
+    fcr = str(fcr_value).strip().lower() == "yes"
+
     return Ticket(
         id=str(raw.get("ticketId", "")),
         display_id=str(raw.get("displayId", "")),
@@ -228,6 +236,7 @@ def _map_ticket(raw: dict) -> Ticket:
         resolution_time=_parse_datetime(raw.get("resolutionTime")),
         resolution_violated=raw.get("resolutionViolated"),
         worklog_hours=_parse_worklog_hours(raw.get("worklogTimespent")),
+        fcr=fcr,
     )
 
 

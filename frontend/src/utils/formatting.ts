@@ -128,16 +128,19 @@ export function getTicketSla(ticket: {
 }
 
 /**
- * Get zero-target card color based on count.
+ * Get zero-target card color based on count with dynamic thresholds.
+ * Thresholds scale with open ticket volume to avoid permanent-red at scale.
  */
-export function zeroTargetColor(count: number): string {
+export function zeroTargetColor(count: number, yellowAt = 2, redAt = 5): string {
   if (count === 0) return 'border-green-500/50 bg-green-500/5'
-  if (count <= 2) return 'border-yellow-500/50 bg-yellow-500/5'
+  if (count <= yellowAt) return 'border-yellow-500/50 bg-yellow-500/5'
+  if (count <= redAt) return 'border-orange-500/50 bg-orange-500/5'
   return 'border-red-500/50 bg-red-500/5'
 }
 
-export function zeroTargetTextColor(count: number): string {
+export function zeroTargetTextColor(count: number, yellowAt = 2, redAt = 5): string {
   if (count === 0) return 'text-green-400'
-  if (count <= 2) return 'text-yellow-400'
+  if (count <= yellowAt) return 'text-yellow-400'
+  if (count <= redAt) return 'text-orange-400'
   return 'text-red-400'
 }

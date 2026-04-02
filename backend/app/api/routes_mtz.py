@@ -1,4 +1,4 @@
-"""Manage to Zero API: zero-target card counts and drill-down ticket lists."""
+"""Manage to Zero API: zero-target card counts, drill-down ticket lists, and trend data."""
 
 from __future__ import annotations
 
@@ -11,15 +11,55 @@ from app.api.queries import CLOSED_STATUSES_SQL, PRIORITY_ORDER, get_ticket_url,
 router = APIRouter(prefix="/api", tags=["manage-to-zero"])
 
 
+async def _get_mtz_config(conn) -> dict:
+    """Load all MTZ-related config from dashboard_config."""
+    keys = [
+        "stale_ticket_threshold_days",
+        "sla_warning_minutes",
+        "mtz_yellow_pct",
+        "mtz_red_pct",
+        "mtz_yellow_floor",
+        "mtz_red_floor",
+        "stale_exclude_statuses",
+    ]
+    placeholders = ",".join("?" for _ in keys)
+    rows = await conn.execute_fetchall(
+        f"SELECT key, value FROM dashboard_config WHERE key IN ({placeholders})",
+        keys,
+    )
+    cfg = {row[0]: row[1] for row in rows}
+    return {
+        "stale_days": int(cfg.get("stale_ticket_threshold_days", "3")),
+        "sla_warn_minutes": int(cfg.get("sla_warning_minutes", "30")),
+        "yellow_pct": float(cfg.get("mtz_yellow_pct", "2")),
+        "red_pct": float(cfg.get("mtz_red_pct", "5")),
+        "yellow_floor": int(cfg.get("mtz_yellow_floor", "2")),
+        "red_floor": int(cfg.get("mtz_red_floor", "5")),
+        "stale_exclude_statuses": [
+            s.strip() for s in cfg.get("stale_exclude_statuses", "").split(",") if s.strip()
+        ],
+    }
+
+
+def _build_stale_exclude_sql(statuses: list[str]) -> str:
+    """Build SQL clause to exclude wait-statuses from stale count."""
+    if not statuses:
+        return ""
+    escaped = ", ".join(f"'{s}'" for s in statuses)
+    return f" AND status NOT IN ({escaped})"
+
+
 @router.get("/manage-to-zero")
 async def manage_to_zero(
     request: Request,
     provider: str | None = Query(None, description="Filter by PSA provider"),
     hide_corp: bool = Query(False, description="Exclude Corp-tagged tickets"),
 ):
-    """Get all Manage to Zero card counts."""
+    """Get all Manage to Zero card counts with dynamic thresholds."""
     db = request.app.state.db
     conn = await db.get_connection()
+
+    cfg = await _get_mtz_config(conn)
 
     # Provider + Corp filter clauses
     prov_clause = ""
@@ -30,21 +70,19 @@ async def manage_to_zero(
     if hide_corp:
         prov_clause += " AND is_corp = 0"
 
-    # Get configurable thresholds
-    stale_days_row = await conn.execute_fetchall(
-        "SELECT value FROM dashboard_config WHERE key = 'stale_ticket_threshold_days'"
-    )
-    stale_days = int(stale_days_row[0][0]) if stale_days_row else 3
-
-    sla_warn_row = await conn.execute_fetchall(
-        "SELECT value FROM dashboard_config WHERE key = 'sla_warning_minutes'"
-    )
-    sla_warn_minutes = int(sla_warn_row[0][0]) if sla_warn_row else 30
-
     now = datetime.now()
-    stale_cutoff = (now - timedelta(days=stale_days)).isoformat()
-    sla_warn_cutoff = (now + timedelta(minutes=sla_warn_minutes)).isoformat()
+    stale_cutoff = (now - timedelta(days=cfg["stale_days"])).isoformat()
+    sla_warn_cutoff = (now + timedelta(minutes=cfg["sla_warn_minutes"])).isoformat()
     now_iso = now.isoformat()
+
+    stale_exclude = _build_stale_exclude_sql(cfg["stale_exclude_statuses"])
+
+    # Total open tickets (for dynamic threshold calculation)
+    open_count_row = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL}{prov_clause}",
+        prov_params,
+    )
+    open_count = open_count_row[0][0] if open_count_row else 0
 
     # Unassigned tickets
     unassigned = await conn.execute_fetchall(
@@ -64,9 +102,9 @@ async def manage_to_zero(
         prov_params,
     )
 
-    # Stale tickets (no update in X days)
+    # Stale tickets (no update in X days, excluding wait-statuses)
     stale = await conn.execute_fetchall(
-        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND updated_time < ?{prov_clause}",
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND updated_time < ?{stale_exclude}{prov_clause}",
         [stale_cutoff, *prov_params],
     )
 
@@ -90,6 +128,12 @@ async def manage_to_zero(
         prov_params,
     )
 
+    # Reopened tickets (still open)
+    reopened = await conn.execute_fetchall(
+        f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND reopened = 1{prov_clause}",
+        prov_params,
+    )
+
     # Unresolved billing flags (join with tickets for provider filtering)
     if provider:
         billing_flags = await conn.execute_fetchall(
@@ -101,6 +145,10 @@ async def manage_to_zero(
             "SELECT COUNT(*) FROM billing_flags WHERE resolved = 0"
         )
 
+    # Calculate dynamic thresholds based on open ticket volume
+    yellow_threshold = max(cfg["yellow_floor"], int(open_count * cfg["yellow_pct"] / 100))
+    red_threshold = max(cfg["red_floor"], int(open_count * cfg["red_pct"] / 100))
+
     return {
         "cards": {
             "unassigned": unassigned[0][0],
@@ -108,10 +156,42 @@ async def manage_to_zero(
             "awaiting_tech_reply": awaiting_tech[0][0],
             "stale": stale[0][0],
             "sla_breaching_soon": sla_breaching[0][0],
-            "sla_violated": sla_violated[0][0],
+            "open_violations": sla_violated[0][0],
+            "reopened": reopened[0][0],
             "unresolved_billing_flags": billing_flags[0][0],
-        }
+        },
+        "thresholds": {
+            "yellow": yellow_threshold,
+            "red": red_threshold,
+        },
+        "open_count": open_count,
     }
+
+
+@router.get("/manage-to-zero/trends")
+async def mtz_trends(
+    request: Request,
+    hours: int = Query(8, description="Hours of trend data to return"),
+):
+    """Get MTZ card count history for sparklines."""
+    db = request.app.state.db
+    conn = await db.get_connection()
+
+    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+    rows = await conn.execute_fetchall(
+        "SELECT recorded_at, card_key, count FROM mtz_snapshots WHERE recorded_at >= ? ORDER BY recorded_at ASC",
+        [cutoff],
+    )
+
+    # Group by card_key
+    trends: dict[str, list[dict]] = {}
+    for row in rows:
+        key = row[1]
+        if key not in trends:
+            trends[key] = []
+        trends[key].append({"time": row[0], "count": row[2]})
+
+    return {"trends": trends}
 
 
 @router.get("/manage-to-zero/{card_type}")
@@ -127,6 +207,7 @@ async def mtz_drilldown(
     db = request.app.state.db
     conn = await db.get_connection()
 
+    cfg = await _get_mtz_config(conn)
     now = datetime.now()
     extra_filters = []
     params: list = []
@@ -145,19 +226,10 @@ async def mtz_drilldown(
 
     extra = " ".join(extra_filters)
 
-    # Get thresholds
-    stale_days_row = await conn.execute_fetchall(
-        "SELECT value FROM dashboard_config WHERE key = 'stale_ticket_threshold_days'"
-    )
-    stale_days = int(stale_days_row[0][0]) if stale_days_row else 3
-    sla_warn_row = await conn.execute_fetchall(
-        "SELECT value FROM dashboard_config WHERE key = 'sla_warning_minutes'"
-    )
-    sla_warn_minutes = int(sla_warn_row[0][0]) if sla_warn_row else 30
-
-    stale_cutoff = (now - timedelta(days=stale_days)).isoformat()
-    sla_warn_cutoff = (now + timedelta(minutes=sla_warn_minutes)).isoformat()
+    stale_cutoff = (now - timedelta(days=cfg["stale_days"])).isoformat()
+    sla_warn_cutoff = (now + timedelta(minutes=cfg["sla_warn_minutes"])).isoformat()
     now_iso = now.isoformat()
+    stale_exclude = _build_stale_exclude_sql(cfg["stale_exclude_statuses"])
 
     query_map = {
         "unassigned": f"""
@@ -185,6 +257,7 @@ async def mtz_drilldown(
             SELECT * FROM tickets
             WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND updated_time < '{stale_cutoff}'
+            {stale_exclude}
             {extra}
             ORDER BY updated_time ASC
         """,
@@ -199,12 +272,19 @@ async def mtz_drilldown(
             {extra}
             ORDER BY COALESCE(first_response_due, resolution_due) ASC
         """,
-        "sla_violated": f"""
+        "open_violations": f"""
             SELECT * FROM tickets
             WHERE status NOT IN {CLOSED_STATUSES_SQL}
             AND (first_response_violated = 1 OR resolution_violated = 1)
             {extra}
             ORDER BY {PRIORITY_ORDER} DESC, created_time ASC
+        """,
+        "reopened": f"""
+            SELECT * FROM tickets
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}
+            AND reopened = 1
+            {extra}
+            ORDER BY {PRIORITY_ORDER} DESC, updated_time DESC
         """,
         "unresolved_billing_flags": f"""
             SELECT t.* FROM tickets t
@@ -214,6 +294,10 @@ async def mtz_drilldown(
             ORDER BY {PRIORITY_ORDER} DESC, t.created_time ASC
         """,
     }
+
+    # Backward compat: accept old key name
+    if card_type == "sla_violated":
+        card_type = "open_violations"
 
     if card_type not in query_map:
         return {"tickets": [], "error": f"Unknown card type: {card_type}"}
@@ -226,3 +310,45 @@ async def mtz_drilldown(
         t["url"] = get_ticket_url(t["id"], request.app.state.providers)
 
     return {"tickets": tickets, "count": len(tickets)}
+
+
+async def record_mtz_snapshot(conn):
+    """Record current MTZ card counts for trend tracking.
+
+    Call this after each sync cycle completes.
+    """
+    from app.api.queries import CLOSED_STATUSES_SQL
+
+    now = datetime.now()
+    now_iso = now.isoformat()
+
+    cfg = await _get_mtz_config(conn)
+    stale_cutoff = (now - timedelta(days=cfg["stale_days"])).isoformat()
+    sla_warn_cutoff = (now + timedelta(minutes=cfg["sla_warn_minutes"])).isoformat()
+    stale_exclude = _build_stale_exclude_sql(cfg["stale_exclude_statuses"])
+
+    queries = {
+        "unassigned": f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND (technician_id IS NULL OR technician_id = '')",
+        "no_first_response": f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND first_response_time IS NULL",
+        "awaiting_tech_reply": f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND last_responder_type = 'requester'",
+        "stale": f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND updated_time < '{stale_cutoff}'{stale_exclude}",
+        "sla_breaching_soon": f"""SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL}
+            AND ((first_response_due IS NOT NULL AND first_response_due <= '{sla_warn_cutoff}' AND first_response_due > '{now_iso}' AND (first_response_violated IS NULL OR first_response_violated = 0))
+            OR (resolution_due IS NOT NULL AND resolution_due <= '{sla_warn_cutoff}' AND resolution_due > '{now_iso}' AND (resolution_violated IS NULL OR resolution_violated = 0)))""",
+        "open_violations": f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND (first_response_violated = 1 OR resolution_violated = 1)",
+        "reopened": f"SELECT COUNT(*) FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL} AND reopened = 1",
+    }
+
+    for card_key, query in queries.items():
+        row = await conn.execute_fetchall(query)
+        count = row[0][0] if row else 0
+        await conn.execute(
+            "INSERT INTO mtz_snapshots (recorded_at, card_key, count) VALUES (?, ?, ?)",
+            [now_iso, card_key, count],
+        )
+
+    # Prune old snapshots (keep 48 hours)
+    prune_cutoff = (now - timedelta(hours=48)).isoformat()
+    await conn.execute("DELETE FROM mtz_snapshots WHERE recorded_at < ?", [prune_cutoff])
+
+    await conn.commit()

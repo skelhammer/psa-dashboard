@@ -234,10 +234,12 @@ class ZendeskProvider(PSAProvider):
                     users[user["id"]] = user
             except Exception as e:
                 logger.warning("Failed to fetch users batch: %s", e)
-        # Inject extra_agents for users not returned by API
+        # Inject or override extra_agents (also serves as name overrides)
         for agent_id, agent_name in self.extra_agents.items():
             int_id = int(agent_id) if agent_id.isdigit() else agent_id
-            if int_id not in users:
+            if int_id in users:
+                users[int_id]["name"] = agent_name
+            else:
                 users[int_id] = {"id": int_id, "name": agent_name, "email": ""}
         return users
 
@@ -425,8 +427,6 @@ class ZendeskProvider(PSAProvider):
         worklog_hours = 0.0
 
         group_id = ticket.get("group_id")
-        tags = ticket.get("tags", [])
-        category = tags[0] if tags else None
 
         return Ticket(
             id=str(ticket.get("id", "")),
@@ -444,7 +444,7 @@ class ZendeskProvider(PSAProvider):
             technician_name=assignee.get("name") if assignee else None,
             status=status,
             priority=priority,
-            category=category,
+            category=None,
             created_time=created_time,
             updated_time=updated_time,
             first_response_due=self._parse_datetime(ticket.get("due_at")),

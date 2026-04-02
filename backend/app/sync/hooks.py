@@ -23,6 +23,7 @@ async def run_post_sync_hooks(conn: aiosqlite.Connection, provider: PSAProvider,
     await sync_billing_config(conn)
     await generate_billing_flags(conn)
     await sync_conversations_for_open_tickets(conn, provider, provider_name)
+    await record_mtz_snapshots(conn)
 
 
 async def backfill_resolution_time(conn: aiosqlite.Connection):
@@ -138,8 +139,28 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
     - MISSING_WORKLOG: Resolved/Closed, worklog_hours is 0 or null
     - ZERO_TIME: Has worklog entries but sum to 0 (detected by worklog_hours = 0 with activity)
     - LOW_TIME: Resolved/Closed and worklog_hours < minimum_bill_minutes
+
+    Tickets created before billing.flags_start_date (config) are excluded.
     """
+    from app.config import get_settings
+    settings = get_settings()
     now = datetime.now().isoformat()
+
+    # Date cutoff: only flag tickets created on or after this date
+    flags_start = settings.billing.flags_start_date
+    date_cutoff_sql = ""
+    date_cutoff_params: list = []
+    if flags_start:
+        date_cutoff_sql = " AND created_time >= ?"
+        date_cutoff_params = [flags_start]
+        # Auto-resolve any existing unresolved flags for tickets before the cutoff
+        await conn.execute(
+            """UPDATE billing_flags
+               SET resolved = 1, resolved_at = ?, resolution_note = 'Auto-resolved: ticket before billing start date'
+               WHERE resolved = 0
+                 AND ticket_id IN (SELECT id FROM tickets WHERE created_time < ?)""",
+            (now, flags_start),
+        )
 
     # Get billable clients
     billable = await conn.execute_fetchall(
@@ -161,8 +182,8 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
                FROM tickets
                WHERE client_id = ?
                  AND status IN {closed}
-                 AND (worklog_hours IS NULL OR worklog_hours = 0)""",
-            (client_id,),
+                 AND (worklog_hours IS NULL OR worklog_hours = 0){date_cutoff_sql}""",
+            [client_id, *date_cutoff_params],
         )
 
         for ticket in tickets:
@@ -188,8 +209,8 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
                    WHERE client_id = ?
                      AND status IN {closed}
                      AND worklog_hours > 0
-                     AND worklog_hours < ?""",
-                (client_id, min_hours),
+                     AND worklog_hours < ?{date_cutoff_sql}""",
+                [client_id, min_hours, *date_cutoff_params],
             )
 
             for ticket in low_tickets:
@@ -335,3 +356,13 @@ async def sync_conversations_for_open_tickets(
 
     if unique_types:
         logger.info("=== Discovered conversation types: %s ===", unique_types)
+
+
+async def record_mtz_snapshots(conn: aiosqlite.Connection):
+    """Record MTZ card counts for trend sparklines."""
+    try:
+        from app.api.routes_mtz import record_mtz_snapshot
+        await record_mtz_snapshot(conn)
+        logger.info("MTZ trend snapshot recorded")
+    except Exception as e:
+        logger.warning("Failed to record MTZ snapshot: %s", e)

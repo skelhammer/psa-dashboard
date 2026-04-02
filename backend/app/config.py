@@ -66,6 +66,7 @@ class ServerConfig:
 class BillingConfig:
     unlimited_plans: list[str] = field(default_factory=list)
     tech_cost_per_hour: float = 55.0
+    flags_start_date: str = ""  # ISO date (e.g. "2025-02-01"); ignore tickets created before this
 
 
 @dataclass
@@ -75,6 +76,8 @@ class ThresholdsConfig:
     max_tickets_per_tech: int = 20
     utilization_target_min: int = 60
     utilization_target_max: int = 85
+    first_response_target_minutes: int = 30
+    resolution_target_minutes: int = 240
 
 
 @dataclass
@@ -171,6 +174,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
     billing = BillingConfig(
         unlimited_plans=billing_raw.get("unlimited_plans", []),
         tech_cost_per_hour=float(billing_raw.get("tech_cost_per_hour", 55)),
+        flags_start_date=billing_raw.get("flags_start_date", ""),
     )
 
     phone_raw = raw.get("phone", {})

@@ -45,6 +45,7 @@ class Ticket:
     resolution_violated: bool | None = None
     worklog_hours: float = 0
     is_corp: bool = False
+    fcr: bool = False
 
 
 @dataclass

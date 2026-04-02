@@ -23,6 +23,7 @@ def get_phone_provider(settings: Settings) -> PhoneProvider | None:
             account_id=phone_cfg.zoom.account_id,
             client_id=phone_cfg.zoom.client_id,
             client_secret=phone_cfg.zoom.client_secret,
+            timezone=settings.server.timezone,
         )
     elif provider_name == "mock":
         from app.phone.mock import MockPhoneProvider

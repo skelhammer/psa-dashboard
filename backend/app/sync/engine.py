@@ -421,6 +421,12 @@ class SyncEngine:
             return merged  # Already prefixed (e.g. "superops:12345")
         return _prefix(self.provider_name, native_tech_id)
 
+    def _is_tech_merged(self, native_tech_id: str | None) -> bool:
+        """Check if a technician ID is in the merge map."""
+        if not native_tech_id:
+            return False
+        return native_tech_id in self._tech_merge_map
+
     async def _upsert_ticket(self, conn: aiosqlite.Connection, ticket: Ticket):
         """Insert or update a ticket in the database with provider-prefixed IDs."""
         now = datetime.now().isoformat()
@@ -449,6 +455,18 @@ class SyncEngine:
             if ticket.resolution_time and ticket.status not in _get_closed_statuses():
                 reopened = True
 
+        # Resolve technician name: if merged, look up canonical name from technicians table
+        resolved_tech_id = self._resolve_tech_id(ticket.technician_id)
+        resolved_tech_name = ticket.technician_name
+        if self._is_tech_merged(ticket.technician_id) and resolved_tech_id:
+            canonical = await conn.execute_fetchall(
+                "SELECT first_name, last_name FROM technicians WHERE id = ?",
+                (resolved_tech_id,),
+            )
+            if canonical:
+                fn, ln = canonical[0][0] or "", canonical[0][1] or ""
+                resolved_tech_name = f"{fn} {ln}".strip() or resolved_tech_name
+
         await conn.execute(
             """INSERT OR REPLACE INTO tickets (
                 id, display_id, subject, ticket_type, source,
@@ -465,7 +483,7 @@ class SyncEngine:
                 worklog_hours,
                 conversation_count, tech_reply_count,
                 last_conversation_time, last_responder_type,
-                reopened, provider, is_corp, synced_at
+                reopened, provider, is_corp, fcr, synced_at
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
@@ -481,7 +499,7 @@ class SyncEngine:
                 ?,
                 ?, ?,
                 ?, ?,
-                ?, ?, ?, ?
+                ?, ?, ?, ?, ?
             )""",
             (
                 prefixed_id, ticket.display_id, ticket.subject, ticket.ticket_type, ticket.source,
@@ -492,8 +510,8 @@ class SyncEngine:
                 ticket.requester_name,
                 _prefix(pn, ticket.tech_group_id) if ticket.tech_group_id else None,
                 ticket.tech_group_name,
-                self._resolve_tech_id(ticket.technician_id),
-                ticket.technician_name,
+                resolved_tech_id,
+                resolved_tech_name,
                 ticket.status, ticket.priority, ticket.impact, ticket.urgency,
                 ticket.category, ticket.subcategory,
                 _prefix(pn, ticket.sla_id) if ticket.sla_id else None,
@@ -511,6 +529,7 @@ class SyncEngine:
                 1 if reopened else 0,
                 pn,
                 1 if ticket.is_corp else 0,
+                1 if ticket.fcr else 0,
                 now,
             ),
         )

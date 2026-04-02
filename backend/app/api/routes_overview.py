@@ -205,6 +205,21 @@ async def overview(request: Request, filters: FilterParams = Depends()):
         [period_start, period_end, *extra_params],
     )
 
+    # FCR (First Call Resolution) rate for closed tickets in period
+    fcr_total = await conn.execute_fetchall(
+        f"""SELECT COUNT(*) FROM tickets
+            WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time <= ?{extra_and}""",
+        [period_start, period_end, *extra_params],
+    )
+    fcr_yes = await conn.execute_fetchall(
+        f"""SELECT COUNT(*) FROM tickets
+            WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time <= ? AND fcr = 1{extra_and}""",
+        [period_start, period_end, *extra_params],
+    )
+    fcr_total_val = fcr_total[0][0] or 0
+    fcr_yes_val = fcr_yes[0][0] or 0
+    fcr_rate = round((fcr_yes_val / fcr_total_val * 100) if fcr_total_val > 0 else 0, 1)
+
     # --- Period-over-period comparison ---
     period_length = filters.date_to - filters.date_from
     prev_end = filters.date_from
@@ -256,6 +271,20 @@ async def overview(request: Request, filters: FilterParams = Depends()):
         [prev_start_iso, prev_end_iso, *extra_params],
     )
 
+    prev_fcr_total = await conn.execute_fetchall(
+        f"""SELECT COUNT(*) FROM tickets
+            WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time < ?{extra_and}""",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_fcr_yes = await conn.execute_fetchall(
+        f"""SELECT COUNT(*) FROM tickets
+            WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time < ? AND fcr = 1{extra_and}""",
+        [prev_start_iso, prev_end_iso, *extra_params],
+    )
+    prev_fcr_total_val = prev_fcr_total[0][0] or 0
+    prev_fcr_yes_val = prev_fcr_yes[0][0] or 0
+    prev_fcr_rate = round((prev_fcr_yes_val / prev_fcr_total_val * 100) if prev_fcr_total_val > 0 else 0, 1)
+
     def pct_change(current, previous):
         if previous is None or previous == 0:
             return None
@@ -267,6 +296,8 @@ async def overview(request: Request, filters: FilterParams = Depends()):
     avg_res_val = round(avg_res[0][0] or 0, 1)
     reopened_val = reopened[0][0]
 
+    settings = get_settings()
+
     return {
         "kpis": {
             "total_open": open_count[0][0],
@@ -276,12 +307,17 @@ async def overview(request: Request, filters: FilterParams = Depends()):
             "created_period": created_p,
             "closed_period": closed_p,
             "closed_this_week": closed_week[0][0],
+            "net_flow_today": created_today[0][0] - closed_today[0][0],
+            "net_flow_period": created_p - closed_p,
             "avg_first_response_minutes": avg_fr_val,
             "avg_resolution_minutes": avg_res_val,
             "sla_compliance_pct": sla_compliance,
             "total_worklog_hours": total_worklog_hours,
             "unresolved_billing_flags": billing_flags[0][0],
             "reopened_period": reopened_val,
+            "fcr_rate": fcr_rate,
+            "fcr_count": fcr_yes_val,
+            "fcr_total": fcr_total_val,
             "open_vs_closed_ratio": {
                 "opened": created_week[0][0],
                 "closed": closed_week[0][0],
@@ -295,8 +331,13 @@ async def overview(request: Request, filters: FilterParams = Depends()):
             "sla_compliance_pct": pct_change(sla_compliance, prev_sla_compliance),
             "total_worklog_hours": pct_change(total_worklog_hours, prev_worklog_hours),
             "reopened_period": pct_change(reopened_val, prev_reopened[0][0]),
+            "fcr_rate": pct_change(fcr_rate, prev_fcr_rate),
         },
         "date_range_label": filters.date_range_label,
+        "thresholds": {
+            "first_response_target_minutes": settings.thresholds.first_response_target_minutes,
+            "resolution_target_minutes": settings.thresholds.resolution_target_minutes,
+        },
     }
 
 
@@ -319,14 +360,23 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     days = (end - start).days
     volume_granularity = "day" if days <= 14 else ("week" if days <= 90 else "month")
 
-    # Volume trend: tickets created per interval
+    # Volume trend: tickets created and closed per interval
     volume_trend = []
     for iv_start, iv_end, label in intervals:
-        row = await conn.execute_fetchall(
+        created_row = await conn.execute_fetchall(
             f"SELECT COUNT(*) FROM tickets WHERE created_time >= ? AND created_time < ?{extra_and}",
             [iv_start.isoformat(), iv_end.isoformat(), *extra_params],
         )
-        volume_trend.append({"date": label, "count": row[0][0] or 0})
+        closed_row = await conn.execute_fetchall(
+            f"SELECT COUNT(*) FROM tickets WHERE status IN {CLOSED_STATUSES_SQL} AND resolution_time >= ? AND resolution_time < ?{extra_and}",
+            [iv_start.isoformat(), iv_end.isoformat(), *extra_params],
+        )
+        volume_trend.append({
+            "date": label,
+            "created": created_row[0][0] or 0,
+            "closed": closed_row[0][0] or 0,
+            "count": created_row[0][0] or 0,  # backward compat
+        })
 
     # Aging buckets: open tickets by age
     aging_buckets = {"0-1d": 0, "1-3d": 0, "3-7d": 0, "7-14d": 0, "14d+": 0}
@@ -369,14 +419,21 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     )
     priority_chart = [{"priority": r["priority"], "count": r["count"]} for r in priority_dist]
 
-    # Workload balance: open tickets per tech
+    # Workload balance: open tickets per tech (group by ID to merge cross-provider names)
     workload = await conn.execute_fetchall(
-        f"""SELECT COALESCE(technician_name, 'Unassigned') as tech, COUNT(*) as count
+        f"""SELECT
+                COALESCE(technician_id, '') as tid,
+                COALESCE(
+                    (SELECT t2.first_name || ' ' || t2.last_name FROM technicians t2 WHERE t2.id = tickets.technician_id),
+                    technician_name,
+                    'Unassigned'
+                ) as tech,
+                COUNT(*) as count
             FROM tickets WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
-            GROUP BY technician_name ORDER BY count DESC""",
+            GROUP BY COALESCE(technician_id, '') ORDER BY count DESC""",
         extra_params,
     )
-    workload_chart = [{"technician": r["tech"], "count": r["count"]} for r in workload]
+    workload_chart = [{"technician": r["tech"].strip() or "Unassigned", "count": r["count"]} for r in workload]
 
     # Tickets by tech group (open tickets); null group treated as Tier 1 Support
     group_dist = await conn.execute_fetchall(
@@ -386,6 +443,24 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
         extra_params,
     )
     group_chart = [{"group": r["group_name"], "count": r["count"]} for r in group_dist]
+
+    # Category distribution (open tickets)
+    category_dist = await conn.execute_fetchall(
+        f"""SELECT COALESCE(category, 'Uncategorized') as cat, COUNT(*) as count FROM tickets
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
+            GROUP BY cat ORDER BY count DESC""",
+        extra_params,
+    )
+    category_chart = [{"category": r["cat"], "count": r["count"]} for r in category_dist]
+
+    # Subcategory distribution (open tickets)
+    subcategory_dist = await conn.execute_fetchall(
+        f"""SELECT COALESCE(subcategory, 'Uncategorized') as subcat, COUNT(*) as count FROM tickets
+            WHERE status NOT IN {CLOSED_STATUSES_SQL}{extra_and}
+            GROUP BY subcat ORDER BY count DESC""",
+        extra_params,
+    )
+    subcategory_chart = [{"subcategory": r["subcat"], "count": r["count"]} for r in subcategory_dist]
 
     # SLA compliance trend (auto-granularity)
     sla_trend = []
@@ -411,32 +486,15 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
             "violated": violated_count,
         })
 
-    # Daily new tickets (always daily granularity, last 30 days max)
-    daily_start = max(start, end - timedelta(days=30))
-    daily_start = daily_start.replace(hour=0, minute=0, second=0, microsecond=0)
-    daily_new = []
-    d = daily_start
-    while d <= end:
-        next_d = d + timedelta(days=1)
-        row = await conn.execute_fetchall(
-            f"SELECT COUNT(*) FROM tickets WHERE created_time >= ? AND created_time < ?{extra_and}",
-            [d.isoformat(), next_d.isoformat(), *extra_params],
-        )
-        daily_new.append({
-            "date": d.strftime("%b %d"),
-            "day": d.strftime("%a"),
-            "count": row[0][0] or 0,
-        })
-        d = next_d
-
     return {
         "volume_trend": volume_trend,
         "volume_granularity": volume_granularity,
-        "daily_new_tickets": daily_new,
         "aging_buckets": [{"bucket": k, "count": v} for k, v in aging_buckets.items()],
         "status_distribution": status_chart,
         "priority_distribution": priority_chart,
         "workload_balance": workload_chart,
         "group_distribution": group_chart,
+        "category_distribution": category_chart,
+        "subcategory_distribution": subcategory_chart,
         "sla_trend": sla_trend,
     }
