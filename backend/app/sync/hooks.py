@@ -286,9 +286,9 @@ async def sync_conversations_for_open_tickets(
     import asyncio
 
     # Cap how many conversation API calls we make per sync. With one call
-    # per ticket and a 15-min sync cadence, 15 keeps us well under most
-    # PSA rate limits even on noisy days.
-    MAX_CONVERSATION_FETCHES = 15
+    # per ticket and a 15-min sync cadence, 25 gives comfortable headroom
+    # for busy mornings while staying well under PSA rate limits.
+    MAX_CONVERSATION_FETCHES = 25
 
     # Order: tickets whose updated_time is newer than last_conversation_time
     # (or which have never been pulled) come first, then by recency.
