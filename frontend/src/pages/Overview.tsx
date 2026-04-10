@@ -11,7 +11,7 @@ import { exportMultiSectionCSV } from '../utils/export'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, CartesianGrid, Legend,
-  ReferenceLine,
+  ReferenceLine, Treemap,
 } from 'recharts'
 import { AlertTriangle } from 'lucide-react'
 
@@ -20,6 +20,80 @@ const tooltipStyle = {
   labelStyle: { color: '#9ca3af' },
   itemStyle: { color: '#d1d5db' },
   cursor: { fill: 'rgba(59, 130, 246, 0.1)' },
+}
+
+// Custom treemap tile: brand-blue rectangle with an HTML label inside a
+// foreignObject, so the browser uses its normal HTML text rendering pipeline
+// (sub-pixel anti-aliasing, proper kerning) instead of the chunky SVG text
+// path. CSS text-overflow handles label truncation per tile.
+function SubcategoryTreemapTile(props: any) {
+  const { x, y, width, height, name, value, depth } = props
+  // depth 0 is the implicit root container; only draw leaves.
+  if (depth === 0) return null
+
+  const canShowLabel = width > 32 && height > 18
+  const canShowValue = width > 32 && height > 32
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{
+          fill: BRAND.primary,
+          stroke: '#0a0a0a',
+          strokeWidth: 2,
+          fillOpacity: 0.85,
+        }}
+      />
+      {canShowLabel && (
+        <foreignObject x={x} y={y} width={width} height={height}>
+          <div
+            // @ts-ignore - xmlns is required for proper foreignObject HTML
+            xmlns="http://www.w3.org/1999/xhtml"
+            style={{
+              boxSizing: 'border-box',
+              width: '100%',
+              height: '100%',
+              padding: '4px 6px',
+              color: '#ffffff',
+              fontFamily:
+                "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+              fontSize: 11,
+              fontWeight: 600,
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              pointerEvents: 'none',
+            }}
+          >
+            <div
+              style={{
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {name}
+            </div>
+            {canShowValue && (
+              <div
+                style={{
+                  color: '#dbeafe',
+                  fontSize: 10,
+                  fontWeight: 400,
+                  marginTop: 1,
+                }}
+              >
+                {value}
+              </div>
+            )}
+          </div>
+        </foreignObject>
+      )}
+    </g>
+  )
 }
 
 const MTZ_CARDS = [
@@ -442,16 +516,23 @@ export default function Overview() {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Subcategory Distribution */}
+        {/* Subcategory Distribution (treemap: handles many items in a fixed area) */}
         <ChartCard title="Open Tickets by Subcategory" exportData={charts?.subcategory_distribution} exportFilename="subcategory_distribution">
-          <ResponsiveContainer width="100%" height={Math.max(250, (charts?.subcategory_distribution?.length || 0) * 28)}>
-            <BarChart data={charts?.subcategory_distribution || []} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis dataKey="subcategory" type="category" tick={{ fontSize: 11, fill: '#9ca3af' }} width={120} />
-              <Tooltip {...tooltipStyle} />
-              <Bar dataKey="count" fill="#EC4899" radius={[0, 4, 4, 0]} />
-            </BarChart>
+          <ResponsiveContainer width="100%" height={350}>
+            <Treemap
+              data={(charts?.subcategory_distribution || []).map((d: any) => ({
+                name: d.subcategory,
+                count: d.count,
+              }))}
+              dataKey="count"
+              stroke="#0a0a0a"
+              content={<SubcategoryTreemapTile />}
+            >
+              <Tooltip
+                {...tooltipStyle}
+                formatter={(value: any) => [value, 'Tickets']}
+              />
+            </Treemap>
           </ResponsiveContainer>
         </ChartCard>
 

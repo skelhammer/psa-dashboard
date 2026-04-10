@@ -23,6 +23,7 @@ config.yaml
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/tsconfig.tsbuildinfo
 
 # Environment
 .env

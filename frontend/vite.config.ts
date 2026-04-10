@@ -14,7 +14,10 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8880',
+        // Use 127.0.0.1 explicitly: on Node 18+ Windows, "localhost" can
+        // resolve to ::1 first, and uvicorn binds only to IPv4 by default,
+        // which produces AggregateError [ECONNREFUSED] in the proxy.
+        target: 'http://127.0.0.1:8880',
         changeOrigin: true,
       },
     },
