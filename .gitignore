@@ -19,6 +19,18 @@ venv/
 # Config (contains secrets)
 config.yaml
 
+# Vault master key and session signing key (auto-generated per install,
+# never share or commit). Losing these means losing access to stored secrets.
+**/.vault_master_key
+**/.session_signing_key
+
+# Migration backup files: these contain plaintext credentials taken out
+# of config.yaml the first time the encrypted vault was bootstrapped.
+*.pre-secrets.bak
+
+# Audit log file (if file-logging is enabled in vault/audit.py)
+logs/
+
 # Node
 node_modules/
 frontend/dist/

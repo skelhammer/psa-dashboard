@@ -53,4 +53,3 @@ echo   Backend:  http://localhost:8880
 echo =============================================
 echo.
 echo Close the Backend and Frontend windows to stop.
-pause
