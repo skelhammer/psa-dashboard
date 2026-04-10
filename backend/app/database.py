@@ -264,6 +264,42 @@ CREATE TABLE IF NOT EXISTS metric_snapshots (
     value REAL,
     PRIMARY KEY (date, metric_name)
 );
+
+-- Vault: encrypted secrets store
+CREATE TABLE IF NOT EXISTS vault_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    wrapped_dek BLOB NOT NULL,
+    dek_nonce BLOB NOT NULL,
+    kek_version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS vault_secrets (
+    key TEXT PRIMARY KEY,
+    nonce BLOB NOT NULL,
+    ciphertext BLOB NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS secrets_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    key TEXT NOT NULL,
+    ip TEXT,
+    user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_secrets_audit_ts ON secrets_audit(ts);
+
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'admin',
+    created_at TEXT NOT NULL,
+    last_login_at TEXT
+);
 """
 
 

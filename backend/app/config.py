@@ -109,6 +109,28 @@ class PhoneSyncConfig:
 
 
 @dataclass
+class VaultConfig:
+    # Default: file-based master key, auto-generated on first run.
+    # Advanced: set the env var named here to override and supply the key
+    # via environment instead. Both modes are supported.
+    key_file: str = "./data/.vault_master_key"
+    audit_retention_days: int = 365
+    env_var_override: str = "PSA_DASHBOARD_MASTER_KEY"
+
+
+@dataclass
+class AuthConfig:
+    # File holding the random key used to sign session cookies. Auto-generated
+    # on first run, same pattern as the vault master key.
+    session_signing_key_file: str = "./data/.session_signing_key"
+    # How long a login session lasts before requiring re-auth.
+    session_ttl_minutes: int = 480  # 8 hours
+    # Login rate limit: max attempts per IP within the window.
+    login_max_attempts: int = 5
+    login_window_minutes: int = 15
+
+
+@dataclass
 class Settings:
     psa: PSAConfig = field(default_factory=PSAConfig)
     sync: SyncConfig = field(default_factory=SyncConfig)
@@ -119,10 +141,20 @@ class Settings:
     business_hours: BusinessHoursConfig = field(default_factory=BusinessHoursConfig)
     phone: PhoneConfig = field(default_factory=PhoneConfig)
     phone_sync: PhoneSyncConfig = field(default_factory=PhoneSyncConfig)
+    vault: VaultConfig = field(default_factory=VaultConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
 
     @property
     def db_path(self) -> Path:
         return Path(self.database.path)
+
+    @property
+    def vault_key_path(self) -> Path:
+        return Path(self.vault.key_file)
+
+    @property
+    def session_signing_key_path(self) -> Path:
+        return Path(self.auth.session_signing_key_file)
 
 
 def _build_nested(cls, data: dict | None):
@@ -193,6 +225,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
         business_hours=_build_nested(BusinessHoursConfig, raw.get("business_hours")),
         phone=phone,
         phone_sync=_build_nested(PhoneSyncConfig, raw.get("phone_sync")),
+        vault=_build_nested(VaultConfig, raw.get("vault")),
+        auth=_build_nested(AuthConfig, raw.get("auth")),
     )
 
 

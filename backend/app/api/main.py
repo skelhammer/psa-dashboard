@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
+from app.auth.ratelimit import LoginRateLimiter
+from app.auth.session import load_or_create_signing_key
 from app.config import get_settings
 from app.database import get_database
 from app.phone.factory import get_phone_provider
@@ -16,6 +21,9 @@ from app.psa.factory import get_providers
 from app.sync.engine import SyncEngine
 from app.sync.manager import MultiProviderSyncManager
 from app.sync.scheduler import SyncScheduler
+from app.vault import crypto
+from app.vault.manager import SecretsManager
+from app.vault.migrate import migrate_from_yaml
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,9 +32,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _bootstrap_kek(settings) -> bytes:
+    """Load the master key, preferring the env var if set, else the key file.
+
+    The env var path is the advanced deployment mode (key off disk). The
+    file path is the default and auto-generates on first run.
+    """
+    env_var = settings.vault.env_var_override
+    if env_var and os.environ.get(env_var, "").strip():
+        logger.info("vault: loading master key from environment variable %s", env_var)
+        return crypto.load_kek_from_env(env_var)
+    key_path = Path(settings.vault.key_file)
+    return crypto.load_or_create_kek_file(key_path)
+
+
+def _resolve_yaml_path() -> Path:
+    """Mirror the lookup in app.config.load_settings so the migration finds
+    the same file the loader did."""
+    candidate = Path(os.environ.get("CONFIG_PATH", "config.yaml"))
+    if candidate.exists():
+        return candidate
+    root = Path(__file__).resolve().parents[3]
+    return root / "config.yaml"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: init DB, create providers, start sync scheduler."""
+    """Startup: init DB, bootstrap vault, migrate yaml, build providers, start scheduler."""
     settings = get_settings()
     logger.info("Starting PSA Dashboard")
 
@@ -35,8 +67,35 @@ async def lifespan(app: FastAPI):
     await db.initialize()
     app.state.db = db
 
-    # Create all configured PSA providers
-    providers_list = get_providers(settings)
+    # Bootstrap vault: load (or create) master key, then construct manager.
+    kek = _bootstrap_kek(settings)
+    vault = SecretsManager(db, kek)
+    app.state.vault = vault
+
+    # Initialize the in-memory login rate limiter (per-process state).
+    app.state.login_rate_limiter = LoginRateLimiter(
+        max_attempts=settings.auth.login_max_attempts,
+        window_seconds=settings.auth.login_window_minutes * 60,
+    )
+
+    # One-time migration from plaintext config.yaml. Idempotent on re-runs.
+    yaml_path = _resolve_yaml_path()
+    migration = await migrate_from_yaml(yaml_path, vault)
+    if migration.migrated:
+        logger.info(
+            "vault: migrated %d secret(s) from %s into the encrypted store",
+            len(migration.migrated),
+            yaml_path,
+        )
+    if migration.backup_written:
+        logger.warning(
+            "vault: original plaintext yaml backed up at %s. "
+            "MOVE OR DELETE this file once you have verified the dashboard works.",
+            migration.backup_written,
+        )
+
+    # Create all configured PSA providers (now async, vault-aware)
+    providers_list = await get_providers(settings, vault)
     provider_map = {p.get_provider_name().lower(): p for p in providers_list}
     logger.info("PSA providers: %s", ", ".join(provider_map.keys()))
 
@@ -51,8 +110,8 @@ async def lifespan(app: FastAPI):
     app.state.manager = manager
     await scheduler.start()
 
-    # Create phone provider if configured
-    phone_provider = get_phone_provider(settings)
+    # Create phone provider if configured (now async, vault-aware)
+    phone_provider = await get_phone_provider(settings, vault)
     app.state.phone_provider = phone_provider
     if phone_provider:
         logger.info("Phone provider: %s", phone_provider.get_provider_name())
@@ -61,17 +120,20 @@ async def lifespan(app: FastAPI):
             phone_provider, db, settings.phone_sync.lookback_days
         )
         app.state.phone_engine = phone_engine
-        asyncio.create_task(_phone_sync_loop(
+        app.state.phone_task = asyncio.create_task(_phone_sync_loop(
             phone_engine, settings.phone_sync.interval_minutes
         ))
     else:
         app.state.phone_engine = None
+        app.state.phone_task = None
         logger.info("Phone provider: none (disabled)")
 
     yield
 
     # Shutdown
     await scheduler.stop()
+    if getattr(app.state, "phone_task", None):
+        app.state.phone_task.cancel()
     await db.close()
     logger.info("Shutdown complete")
 
@@ -103,6 +165,17 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    settings = get_settings()
+    signing_key = load_or_create_signing_key(settings.session_signing_key_path)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=signing_key,
+        session_cookie="psa_dashboard_session",
+        max_age=settings.auth.session_ttl_minutes * 60,
+        same_site="lax",
+        https_only=False,
+    )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -124,6 +197,8 @@ def create_app() -> FastAPI:
     from app.api.routes_phone import router as phone_router
     from app.api.routes_alerts import router as alerts_router
     from app.api.routes_contracts import router as contracts_router
+    from app.api.routes_auth import router as auth_router
+    from app.api.routes_admin_secrets import router as admin_secrets_router
 
     app.include_router(sync_router)
     app.include_router(filters_router)
@@ -137,5 +212,7 @@ def create_app() -> FastAPI:
     app.include_router(phone_router)
     app.include_router(alerts_router)
     app.include_router(contracts_router)
+    app.include_router(auth_router)
+    app.include_router(admin_secrets_router)
 
     return app
