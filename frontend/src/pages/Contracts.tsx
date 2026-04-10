@@ -29,12 +29,12 @@ type FilterKey = 'active' | 'expiring_30' | 'expiring_60' | 'expiring_90' | 'exp
 type PlanKey = 'msp_all' | 'msp_basic' | 'msp_advanced' | 'msp_premium' | 'msp_platinum' | 'all'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'active', label: 'Active' },
+  { key: 'all', label: 'All' },
   { key: 'expiring_30', label: 'Expiring < 30d' },
   { key: 'expiring_60', label: 'Expiring < 60d' },
   { key: 'expiring_90', label: 'Expiring < 90d' },
   { key: 'expired', label: 'Expired' },
-  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
 ]
 
 const PLANS: { key: PlanKey; label: string }[] = [
@@ -94,7 +94,7 @@ function sourceBadge(source: string) {
 }
 
 export default function Contracts() {
-  const [filter, setFilter] = useState<FilterKey>('active')
+  const [filter, setFilter] = useState<FilterKey>('all')
   const [plan, setPlan] = useState<PlanKey>('msp_all')
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Contract | null>(null)

@@ -119,7 +119,9 @@ async def list_contracts(
     """List SuperOps contracts, sorted by end_date ascending.
 
     Status filters:
-      - active: currently in effect (no end_date, or end_date >= today) and status != terminated
+      - active: end_date set and in the future, status != terminated.
+        Contracts without an end_date are intentionally excluded since they
+        cannot be tracked for renewal.
       - expiring_30/60/90: active contracts expiring within N days
       - expired: end_date in the past
       - all: everything tied to SuperOps
@@ -143,7 +145,7 @@ async def list_contracts(
         params.extend(plan_params)
 
     if filter == "active":
-        conditions.append("(end_date IS NULL OR end_date >= ?)")
+        conditions.append("end_date IS NOT NULL AND end_date >= ?")
         params.append(today_iso)
         conditions.append("LOWER(status) != 'terminated'")
     elif filter == "expiring_30":
@@ -173,7 +175,12 @@ async def list_contracts(
            FROM client_contracts
            WHERE {where}
            ORDER BY
-               CASE WHEN end_date IS NULL THEN 1 ELSE 0 END,
+               CASE
+                   WHEN end_date IS NULL THEN 2
+                   WHEN end_date < date('now') THEN 0
+                   ELSE 1
+               END,
+               CASE WHEN end_date < date('now') THEN end_date END DESC,
                end_date ASC,
                client_name ASC""",
         params,
@@ -228,9 +235,8 @@ async def list_contracts(
         end = _parse_iso_date(r["end_date"])
         status = (r["status"] or "").lower()
         days = _days_until(end, today)
-        if end is None or (days is not None and days >= 0):
-            if status != "terminated":
-                counts["active"] += 1
+        if days is not None and days >= 0 and status != "terminated":
+            counts["active"] += 1
         if days is not None:
             if days < 0:
                 counts["expired"] += 1
