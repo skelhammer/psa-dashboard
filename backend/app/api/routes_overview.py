@@ -462,6 +462,31 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     )
     subcategory_chart = [{"subcategory": r["subcat"], "count": r["count"]} for r in subcategory_dist]
 
+    # Daily new tickets: one bar per day for up to the last 30 days of the
+    # selected period. Single GROUP BY query (vs the per-day loop the prior
+    # implementation used) so the chart adds at most 1 SQL query, not 30.
+    daily_start = max(start, end - timedelta(days=30))
+    daily_start = daily_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    daily_end = end + timedelta(days=1)
+    daily_rows = await conn.execute_fetchall(
+        f"""SELECT date(created_time) as day, COUNT(*) as count
+            FROM tickets
+            WHERE created_time >= ? AND created_time < ?{extra_and}
+            GROUP BY date(created_time)""",
+        [daily_start.isoformat(), daily_end.isoformat(), *extra_params],
+    )
+    counts_by_day = {r["day"]: r["count"] for r in daily_rows}
+    daily_new = []
+    d = daily_start
+    while d <= end:
+        iso_day = d.strftime("%Y-%m-%d")
+        daily_new.append({
+            "date": d.strftime("%b %d"),
+            "day": d.strftime("%a"),
+            "count": counts_by_day.get(iso_day, 0),
+        })
+        d = d + timedelta(days=1)
+
     # SLA compliance trend (auto-granularity)
     sla_trend = []
     for iv_start, iv_end, label in intervals:
@@ -489,6 +514,7 @@ async def overview_charts(request: Request, filters: FilterParams = Depends()):
     return {
         "volume_trend": volume_trend,
         "volume_granularity": volume_granularity,
+        "daily_new_tickets": daily_new,
         "aging_buckets": [{"bucket": k, "count": v} for k, v in aging_buckets.items()],
         "status_distribution": status_chart,
         "priority_distribution": priority_chart,

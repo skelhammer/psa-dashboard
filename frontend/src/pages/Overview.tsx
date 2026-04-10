@@ -98,6 +98,7 @@ export default function Overview() {
       })
     }
     if (charts?.volume_trend?.length) sections.push({ name: 'Volume Trend', data: charts.volume_trend })
+    if (charts?.daily_new_tickets?.length) sections.push({ name: 'New Tickets Per Day', data: charts.daily_new_tickets })
     if (charts?.aging_buckets?.length) sections.push({ name: 'Ticket Aging', data: charts.aging_buckets })
     if (charts?.workload_balance?.length) sections.push({ name: 'Workload Balance', data: charts.workload_balance })
     if (charts?.group_distribution?.length) sections.push({ name: 'Open Tickets by Group', data: charts.group_distribution })
@@ -322,6 +323,25 @@ export default function Overview() {
               <Legend wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
               <Bar dataKey="created" name="Created" fill={BRAND.primary} radius={[2, 2, 0, 0]} />
               <Bar dataKey="closed" name="Closed" fill="#34D399" radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        {/* New Tickets Per Day */}
+        <ChartCard title="New Tickets Per Day" exportData={charts?.daily_new_tickets} exportFilename="daily_new_tickets">
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={charts?.daily_new_tickets || []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} allowDecimals={false} />
+              <Tooltip
+                {...tooltipStyle}
+                labelFormatter={(label: string, payload: any[]) => {
+                  const day = payload?.[0]?.payload?.day
+                  return day ? `${day}, ${label}` : label
+                }}
+              />
+              <Bar dataKey="count" name="New Tickets" fill="#06B6D4" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
