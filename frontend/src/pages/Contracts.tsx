@@ -25,7 +25,7 @@ type Contract = {
   expiry_bucket: string
 }
 
-type FilterKey = 'active' | 'expiring_30' | 'expiring_60' | 'expiring_90' | 'expired' | 'all'
+type FilterKey = 'active' | 'expiring_30' | 'expiring_60' | 'expiring_90' | 'expired' | 'no_end_date' | 'all'
 type PlanKey = 'msp_all' | 'msp_basic' | 'msp_advanced' | 'msp_premium' | 'msp_platinum' | 'all'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -34,6 +34,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'expiring_60', label: 'Expiring < 60d' },
   { key: 'expiring_90', label: 'Expiring < 90d' },
   { key: 'expired', label: 'Expired' },
+  { key: 'no_end_date', label: 'No End Date' },
   { key: 'active', label: 'Active' },
 ]
 

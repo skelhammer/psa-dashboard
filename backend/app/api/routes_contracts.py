@@ -112,7 +112,7 @@ def _plan_clause(plan: str) -> tuple[str, list]:
 @router.get("/contracts")
 async def list_contracts(
     request: Request,
-    filter: str = Query("active", description="active | expiring_30 | expiring_60 | expiring_90 | expired | all"),
+    filter: str = Query("active", description="active | expiring_30 | expiring_60 | expiring_90 | expired | no_end_date | all"),
     plan: str = Query("msp_all", description="msp_all | msp_basic | msp_advanced | msp_premium | msp_platinum | all"),
     search: str | None = Query(None, description="Client name substring search"),
 ):
@@ -124,6 +124,8 @@ async def list_contracts(
         cannot be tracked for renewal.
       - expiring_30/60/90: active contracts expiring within N days
       - expired: end_date in the past
+      - no_end_date: contracts missing an end_date entirely. Treated as
+        needing renewal (we just do not have the data to schedule it yet).
       - all: everything tied to SuperOps
 
     Plan filter scopes contracts by their contract_name. Default 'msp_all' hides
@@ -160,6 +162,9 @@ async def list_contracts(
     elif filter == "expired":
         conditions.append("end_date IS NOT NULL AND end_date < ?")
         params.append(today_iso)
+    elif filter == "no_end_date":
+        conditions.append("end_date IS NULL")
+        conditions.append("LOWER(status) != 'terminated'")
     # "all" adds no extra condition
 
     if search:
@@ -229,6 +234,7 @@ async def list_contracts(
         "expiring_60": 0,
         "expiring_90": 0,
         "expired": 0,
+        "no_end_date": 0,
         "all": len(summary_rows),
     }
     for r in summary_rows:
@@ -237,6 +243,8 @@ async def list_contracts(
         days = _days_until(end, today)
         if days is not None and days >= 0 and status != "terminated":
             counts["active"] += 1
+        if end is None and status != "terminated":
+            counts["no_end_date"] += 1
         if days is not None:
             if days < 0:
                 counts["expired"] += 1
