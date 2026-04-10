@@ -460,24 +460,38 @@ class SyncEngine:
         pn = self.provider_name
         prefixed_id = _prefix(pn, ticket.id)
 
-        # Check if ticket was previously resolved (for reopened detection)
+        # Pull existing state in one shot:
+        # - resolution_time + status: needed for reopened detection
+        # - reopened: prior reopened flag is sticky
+        # - conversation columns: preserved across upserts so the post-sync
+        #   conversation hook (which only refreshes a small batch per run)
+        #   does not lose data for tickets it did not touch this cycle.
         existing = await conn.execute_fetchall(
-            "SELECT resolution_time, status FROM tickets WHERE id = ?",
+            """SELECT resolution_time, status, reopened,
+                      conversation_count, tech_reply_count,
+                      last_conversation_time, last_responder_type
+               FROM tickets WHERE id = ?""",
             (prefixed_id,),
         )
 
         reopened = False
+        prev_conv_count = 0
+        prev_tech_reply_count = 0
+        prev_last_conv_time: str | None = None
+        prev_last_responder: str | None = None
+
         if existing:
-            old_res_time = existing[0][0]
-            old_status = existing[0][1]
+            row = existing[0]
+            old_res_time = row[0]
+            old_reopened_flag = row[2]
+            prev_conv_count = row[3] or 0
+            prev_tech_reply_count = row[4] or 0
+            prev_last_conv_time = row[5]
+            prev_last_responder = row[6]
             if old_res_time and ticket.status not in _get_closed_statuses():
                 reopened = True
-            if not reopened:
-                old_reopened = await conn.execute_fetchall(
-                    "SELECT reopened FROM tickets WHERE id = ?", (prefixed_id,),
-                )
-                if old_reopened and old_reopened[0][0]:
-                    reopened = True
+            if not reopened and old_reopened_flag:
+                reopened = True
         else:
             if ticket.resolution_time and ticket.status not in _get_closed_statuses():
                 reopened = True
@@ -551,8 +565,8 @@ class SyncEngine:
                 ticket.resolution_time.isoformat() if ticket.resolution_time else None,
                 1 if ticket.resolution_violated else (0 if ticket.resolution_violated is False else None),
                 ticket.worklog_hours,
-                0, 0,  # conversation_count, tech_reply_count (updated by hooks)
-                None, None,  # last_conversation_time, last_responder_type (updated by hooks)
+                prev_conv_count, prev_tech_reply_count,
+                prev_last_conv_time, prev_last_responder,
                 1 if reopened else 0,
                 pn,
                 1 if ticket.is_corp else 0,
