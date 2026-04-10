@@ -2,14 +2,14 @@ psa:
   # List of active providers. All enabled providers sync simultaneously.
   # Options: superops, zendesk, mock
   providers: [mock]  # e.g. [superops, zendesk] for dual-provider
+
+  # Credentials (subdomain, email, api_token) are managed through the
+  # Settings page in the dashboard UI after first launch. Do NOT put them
+  # in this file. They are stored encrypted in backend/data/metrics.db.
+  # See deploy/SECRETS-DEPLOYMENT.md for details.
   superops:
     api_url: https://api.superops.ai/msp
-    api_token: YOUR_API_TOKEN_HERE
-    subdomain: YOUR_SUBDOMAIN
   zendesk:
-    subdomain: YOUR_SUBDOMAIN
-    email: agent@yourcompany.com
-    api_token: YOUR_ZENDESK_API_TOKEN
     page_size: 100
     ticket_url_template: "https://yourcompany.zendesk.com/agent/tickets/{ticket_id}"
     # exclude_custom_fields: ["custom_field_12345:true"]  # Tag matching tickets as Corp
@@ -20,8 +20,6 @@ psa:
     #   "12345678901234": "superops:9876543210"
   halopsa:  # Pre-stub for future use
     api_url: https://INSTANCE.halopsa.com/api
-    client_id: YOUR_CLIENT_ID
-    client_secret: YOUR_CLIENT_SECRET
 
 sync:
   interval_minutes: 15
@@ -62,10 +60,10 @@ business_hours:
 
 phone:
   provider: none          # Options: zoom, mock, none
-  zoom:
-    account_id: YOUR_ZOOM_ACCOUNT_ID      # From Zoom Server-to-Server OAuth app
-    client_id: YOUR_ZOOM_CLIENT_ID
-    client_secret: YOUR_ZOOM_CLIENT_SECRET
+  # Zoom credentials (account_id, client_id, client_secret) are managed
+  # through the Settings page in the dashboard UI. Do NOT put them in
+  # this file. See deploy/SECRETS-DEPLOYMENT.md for details.
+  zoom: {}
 
 phone_sync:
   interval_minutes: 5

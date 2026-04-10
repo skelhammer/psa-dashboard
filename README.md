@@ -63,28 +63,19 @@ cd psa-dashboard
 cp config.example.yaml config.yaml
 ```
 
-Edit `config.yaml` with your settings:
+Edit `config.yaml` with your **non-secret** settings:
 
 ```yaml
 psa:
   providers: [superops, zendesk]  # or [mock] for testing
   superops:
     api_url: https://api.superops.ai/msp
-    api_token: YOUR_API_TOKEN
-    subdomain: YOUR_SUBDOMAIN
   zendesk:
-    subdomain: YOUR_SUBDOMAIN
-    email: agent@yourcompany.com
-    api_token: YOUR_ZENDESK_API_TOKEN
     page_size: 100
     ticket_url_template: "https://yourcompany.zendesk.com/agent/tickets/{ticket_id}"
 
 phone:
   provider: zoom  # or "mock" or "none"
-  zoom:
-    account_id: YOUR_ZOOM_ACCOUNT_ID
-    client_id: YOUR_ZOOM_CLIENT_ID
-    client_secret: YOUR_ZOOM_CLIENT_SECRET
 
 server:
   timezone: America/Los_Angeles  # Your IANA timezone
@@ -93,6 +84,14 @@ billing:
   unlimited_plans: ["Managed Plan A"]  # Contract names excluded from billing audit
   tech_cost_per_hour: 55             # For profitability calculations
 ```
+
+> **Credentials (API tokens, subdomains, Zendesk email, Zoom OAuth) are
+> NOT stored in `config.yaml`.** They are managed through the Settings page
+> in the dashboard UI on first launch and stored encrypted (AES-256-GCM) in
+> the SQLite database. The first time you visit `/settings` you will be
+> prompted to set an admin password, then you can enter your API tokens.
+> See `deploy/SECRETS-DEPLOYMENT.md` for the full credential management
+> workflow including rotation, backup, and recovery.
 
 ### 3. Install and run
 
@@ -180,14 +179,15 @@ sudo systemctl stop psa-dashboard      # stop the backend
 journalctl -u psa-dashboard -f         # tail logs
 ```
 
-**Configuration** lives at `config.yaml` in the repo directory. Edit it and restart the service to apply changes:
+**Configuration:**
+- **Credentials** (API tokens, subdomains, Zendesk email, Zoom OAuth) are managed through the Settings page in the dashboard at `http://your-server-ip:5051/settings`. No service restart needed; the backend hot-reloads providers when you save a new value. See `deploy/SECRETS-DEPLOYMENT.md` for backup, rotation, and recovery.
+- **Non-secret settings** (timezone, sync intervals, business hours, billing rules, Zendesk display overrides) live in `config.yaml`. Edit and restart to apply:
+  ```bash
+  nano config.yaml
+  sudo systemctl restart psa-dashboard
+  ```
 
-```bash
-nano config.yaml
-sudo systemctl restart psa-dashboard
-```
-
-**Updating** after pulling new code: re-run `sudo bash install.sh`. Your `config.yaml` is preserved across runs.
+**Updating** after pulling new code: `sudo bash update.sh`. Your `config.yaml` and encrypted vault are preserved across updates.
 
 ### 4. Open the dashboard
 
@@ -244,15 +244,19 @@ psa-dashboard/
 
 ## Configuration Reference
 
+> **Credential fields** (marked **UI** below) are managed through the
+> Settings page in the dashboard, NOT in `config.yaml`. They are stored
+> encrypted in the SQLite database. Listed here for reference only.
+
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
 | `psa.providers` | | `[mock]` | List of active PSA providers: `superops`, `zendesk`, `mock` |
 | `psa.superops.api_url` | | `https://api.superops.ai/msp` | SuperOps API URL |
-| `psa.superops.api_token` | | | SuperOps API bearer token |
-| `psa.superops.subdomain` | | | SuperOps subdomain |
-| `psa.zendesk.subdomain` | | | Zendesk subdomain (e.g. `yourcompany`) |
-| `psa.zendesk.email` | | | Zendesk agent email for API auth |
-| `psa.zendesk.api_token` | | | Zendesk API token |
+| `psa.superops.api_token` | | **UI** | SuperOps API bearer token (Settings page) |
+| `psa.superops.subdomain` | | **UI** | SuperOps subdomain (Settings page) |
+| `psa.zendesk.subdomain` | | **UI** | Zendesk subdomain, e.g. `yourcompany` (Settings page) |
+| `psa.zendesk.email` | | **UI** | Zendesk agent email for API auth (Settings page) |
+| `psa.zendesk.api_token` | | **UI** | Zendesk API token (Settings page) |
 | `psa.zendesk.page_size` | | `100` | Results per Zendesk API page |
 | `psa.zendesk.ticket_url_template` | | | URL template with `{ticket_id}` placeholder |
 | `psa.zendesk.exclude_custom_fields` | | `[]` | Custom field rules for Corp tagging (e.g. `["custom_field_123:true"]`) |
@@ -260,9 +264,9 @@ psa-dashboard/
 | `psa.zendesk.extra_agents` | | `{}` | Map of Zendesk user IDs to names for agents not returned by search |
 | `psa.zendesk.tech_merge_map` | | `{}` | Map Zendesk tech IDs to SuperOps prefixed IDs for unified stats |
 | `phone.provider` | | `none` | Phone provider: `zoom`, `mock`, or `none` |
-| `phone.zoom.account_id` | | | Zoom Server-to-Server OAuth Account ID |
-| `phone.zoom.client_id` | | | Zoom OAuth Client ID |
-| `phone.zoom.client_secret` | | | Zoom OAuth Client Secret |
+| `phone.zoom.account_id` | | **UI** | Zoom Server-to-Server OAuth Account ID (Settings page) |
+| `phone.zoom.client_id` | | **UI** | Zoom OAuth Client ID (Settings page) |
+| `phone.zoom.client_secret` | | **UI** | Zoom OAuth Client Secret (Settings page) |
 | `sync.interval_minutes` | | `15` | Minutes between PSA background syncs |
 | `phone_sync.interval_minutes` | | `5` | Minutes between phone data syncs |
 | `phone_sync.lookback_days` | | `30` | Days of phone history to sync |
@@ -293,7 +297,16 @@ To use live Zoom Phone data instead of mock data:
 3. Select **Server-to-Server OAuth** and create the app
 4. Add scopes: `phone:read:admin`, `phone:read:call_log:admin`, `phone:read:call_queue:admin`
 5. Fill in required app info and click **Activate**
-6. Copy Account ID, Client ID, and Client Secret to `config.yaml`
-7. Set `phone.provider: zoom` and restart the backend
+6. Set `phone.provider: zoom` in `config.yaml` and restart the backend
+7. Open the dashboard, go to **Settings**, and paste Account ID, Client ID, and Client Secret into the Zoom Phone fields
 
 Requires a Zoom Business/Enterprise account with an active Zoom Phone license.
+
+## Credential Management
+
+API tokens, subdomains, Zendesk email, and Zoom OAuth credentials are managed through the **Settings** page in the dashboard rather than in `config.yaml`. The first time you visit `/settings` you will be prompted to set an admin password, then you can enter your credentials. Stored values are encrypted with AES-256-GCM in the SQLite database.
+
+- **Set or rotate a credential:** Settings page in the dashboard. The backend hot-reloads the affected provider; no restart needed.
+- **Forgot the admin password:** reset it from the server CLI. See `deploy/SECRETS-DEPLOYMENT.md` recovery section.
+- **Backup and disaster recovery:** the master key file at `backend/data/.vault_master_key` decrypts the stored credentials. Back it up alongside `metrics.db`. See `deploy/SECRETS-DEPLOYMENT.md`.
+- **Migrating an existing install** with plaintext secrets in `config.yaml`: see `deploy/SECRETS-DEPLOYMENT.md`. The migration is automatic on first restart with the new code; the runbook covers verification, rollback, and post-migration cleanup.
