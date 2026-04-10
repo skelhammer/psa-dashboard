@@ -18,15 +18,10 @@ psa:
     #   "12345678901234": "Agent Name"
     # tech_merge_map:                  # Map Zendesk tech IDs to SuperOps tech IDs
     #   "12345678901234": "superops:9876543210"
-  halopsa:  # Pre-stub for future use
-    api_url: https://INSTANCE.halopsa.com/api
 
 sync:
   interval_minutes: 15
   full_sync_on_first_run: true
-
-database:
-  path: ./data/metrics.db
 
 server:
   host: 0.0.0.0
