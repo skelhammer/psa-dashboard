@@ -9,6 +9,199 @@ password.
 If this is a fresh install with no prior `config.yaml`, skip to
 [Fresh installs](#fresh-installs) at the bottom.
 
+**Time required:** about 20 minutes of active attention. Block out the time
+in advance and do not start this when you might get interrupted. Steps 3
+through 5 must run consecutively.
+
+## Quick walkthrough (do this on migration day)
+
+This is the linear path. The sections below it explain what each step does
+and what to do when something goes wrong. Read this section start to finish
+before you SSH in, then follow it step by step.
+
+### Before you SSH in
+
+Have these ready in a window you can reach without leaving your terminal:
+
+- **Your password manager, unlocked.** You will add 2 new entries during
+  this migration.
+- **A new strong admin password generated and on your clipboard.** At least
+  12 characters. Generate it from your password manager now, do not make
+  one up at the keyboard mid-migration.
+
+### Step 1: SSH in and back up
+
+```bash
+ssh intadmin@your-server-ip
+cd /path/to/psa-dashboard          # wherever install.sh was run
+
+cp config.yaml ~/config.yaml.backup-$(date +%Y%m%d)
+cp backend/data/metrics.db ~/metrics.db.backup-$(date +%Y%m%d)
+ls -la ~/config.yaml.backup-* ~/metrics.db.backup-*
+```
+
+The metrics.db copy is a few MB but gives you total rollback safety.
+Worth it.
+
+### Step 2: Open journalctl in a SECOND terminal
+
+Open a separate SSH session in a new terminal window so you can watch the
+logs while the update runs in the first window.
+
+```bash
+sudo journalctl -u psa-dashboard -f
+```
+
+Leave this running. Do not close it. The migration will scroll through
+here.
+
+### Step 3: Run the update (in the first terminal)
+
+```bash
+sudo bash update.sh
+```
+
+You will see, in order:
+1. `Pulling latest code...`
+2. `Python dependencies changed, installing...` (cryptography, bcrypt,
+   itsdangerous; takes about 30 seconds)
+3. `Frontend changed, rebuilding...` (the React build, about 30-60 seconds)
+4. `Restarting service...`
+5. `Done. Dashboard is updated and running.`
+
+### Step 4: Watch the journalctl window
+
+Within a few seconds of the restart you should see, in order:
+
+```
+Starting PSA Dashboard
+Database initialized at data/metrics.db
+Generated new vault master key at data/.vault_master_key. BACK THIS FILE UP...
+vault: migrated 8 secret(s) from .../config.yaml into the encrypted store
+vault: original plaintext yaml backed up at .../config.yaml.pre-secrets.bak
+PSA providers: superops, zendesk
+Sync scheduler started
+Phone provider: Zoom Phone
+```
+
+The number of migrated secrets should be **8** (matching the test computer
+migration). Within the next 5 to 10 seconds you should also see successful
+upstream API calls:
+
+```
+POST https://api.superops.ai/msp "HTTP/1.1 200"
+POST https://zoom.us/oauth/token "HTTP/1.1 200 OK"
+[superops] Synced N technicians
+```
+
+That confirms the providers are reading credentials from the vault and
+authenticating. **If you see `migrated 0` and `skipped 8`, STOP and roll
+back** (see [Rollback](#rollback) below). Do not proceed until you
+understand why nothing migrated.
+
+### Step 5: Back up the master key (CRITICAL, do not skip)
+
+In the first terminal:
+
+```bash
+sudo cat backend/data/.vault_master_key
+```
+
+You will see a single line of base64. **Select it, copy it, paste it into
+your password manager** as a new entry labeled `PSA Dashboard PROD master
+key`. This is the only thing that can decrypt your stored credentials. If
+this file is ever lost or the disk dies and you do not have this backup,
+your stored credentials are unrecoverable and you will have to re-enter
+every API token through the Settings UI.
+
+### Step 6: Delete the plaintext backup file
+
+The migration created a one-time backup of your original `config.yaml`
+that still contains your plaintext API tokens. Delete it now that you have
+verified the migration succeeded:
+
+```bash
+sudo rm config.yaml.pre-secrets.bak
+ls config.yaml*    # should show only config.yaml (and your earlier ~/backup)
+```
+
+### Step 7: Set the admin password in the browser
+
+Open `http://your-server-ip:5051/settings` in your browser. You will see
+the **Set Admin Password** form (because no admin user exists yet on the
+live server's database).
+
+1. Paste the strong password you generated in your clipboard
+2. Confirm it
+3. Click **Create admin and continue**
+4. **Save this password in your password manager** as a separate entry
+   labeled `PSA Dashboard PROD admin login`. It is a different secret
+   from the master key.
+
+You should land on the Settings page proper with three provider cards
+(SuperOps, Zendesk, Zoom Phone) all showing **Configured**. The text
+fields (subdomain, email) should be pre-filled with your actual values.
+
+### Step 8: Smoke test
+
+In the browser:
+
+- Navigate to Overview, Tickets, Phone Analytics, Manage to Zero — they
+  should all load with your real data, no errors
+- Click **Test connection** on each of the three provider cards in
+  Settings. You should see a green check and a count: "Connected, found N
+  technicians" or "Connected, found N users"
+- Scroll to the bottom of Settings and check the **Audit Log** table.
+  You should see 8 entries with action `set` and actor `migrate`, plus
+  one entry with actor `admin` for your password setup
+
+### Step 9: Cleanup (optional, do this a day or two later)
+
+After you have used the dashboard for at least a day and confirmed
+everything is solid, log into the server and trim the stale placeholders
+from your live `config.yaml`. They are harmless (the factory ignores
+them) but they are noise:
+
+```bash
+sudo nano /path/to/psa-dashboard/config.yaml
+```
+
+Remove these lines (they are now in the vault, the entries are just
+leftover placeholders):
+
+- `psa.superops.api_token: __stored_in_db__`
+- `psa.superops.subdomain: __stored_in_db__`
+- `psa.zendesk.subdomain: __stored_in_db__`
+- `psa.zendesk.email: __stored_in_db__`
+- `psa.zendesk.api_token: __stored_in_db__`
+- `phone.zoom.account_id: __stored_in_db__`
+- `phone.zoom.client_id: __stored_in_db__`
+- `phone.zoom.client_secret: __stored_in_db__`
+
+Also remove these blocks if present, they are unused:
+
+- The entire `database:` section (the default value matches)
+- The `halopsa:` stub
+- The `phone.zoom:` empty block (leave `phone.provider: zoom`)
+
+Then restart and verify:
+
+```bash
+sudo systemctl restart psa-dashboard
+sudo journalctl -u psa-dashboard -f --since "30 seconds ago"
+```
+
+You want to see "vault: nothing to migrate (skipped 8 keys)" and the
+sync running normally with no errors.
+
+---
+
+## Reference: details on each phase
+
+The sections below explain in more depth what each step does, what can go
+wrong, and how to recover. Read these only if you hit a problem during
+the walkthrough above.
+
 ## Before you start
 
 1. **Confirm you are the only person with shell access to the VM.** SSH
