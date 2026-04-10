@@ -9,6 +9,8 @@ import {
   Trash2,
   Loader2,
   History,
+  Plug,
+  X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import {
@@ -20,6 +22,8 @@ import {
   useSetSecret,
   useDeleteSecret,
   useAudit,
+  useChangePassword,
+  useTestProvider,
   SecretView,
 } from '../api/admin'
 
@@ -351,6 +355,186 @@ function SecretRow({ secret }: { secret: SecretView }) {
   )
 }
 
+// ----- Change password section -----
+
+function ChangePasswordSection() {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [savedFlash, setSavedFlash] = useState(false)
+  const change = useChangePassword()
+
+  const tooShort = next.length > 0 && next.length < 12
+  const mismatch = confirm.length > 0 && next !== confirm
+  const sameAsCurrent = current.length > 0 && next.length > 0 && current === next
+  const canSubmit =
+    current.length > 0 &&
+    next.length >= 12 &&
+    next === confirm &&
+    !sameAsCurrent &&
+    !change.isPending
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!canSubmit) return
+    change.mutate(
+      { current_password: current, new_password: next },
+      {
+        onSuccess: () => {
+          setCurrent('')
+          setNext('')
+          setConfirm('')
+          setSavedFlash(true)
+          setTimeout(() => setSavedFlash(false), 3000)
+        },
+      }
+    )
+  }
+
+  return (
+    <section className="rounded-2xl border border-white/[0.08] bg-[#0C0C0E] p-5">
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold text-white">Change Admin Password</h2>
+        <p className="text-[11px] text-gray-500">
+          Rotate the password used to sign into this Settings page. Save the new
+          one in your password manager before clicking save.
+        </p>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-2 max-w-md">
+        <div>
+          <label className="block text-[11px] font-medium text-gray-400 mb-1">
+            Current password
+          </label>
+          <input
+            type="password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            autoComplete="current-password"
+            className="w-full px-3 py-1.5 rounded-lg bg-[#09090B] border border-white/[0.08] text-[12px] text-white placeholder-gray-600 focus:outline-none focus:border-brand-primary/50"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-medium text-gray-400 mb-1">
+            New password
+          </label>
+          <input
+            type="password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            autoComplete="new-password"
+            placeholder="At least 12 characters"
+            className="w-full px-3 py-1.5 rounded-lg bg-[#09090B] border border-white/[0.08] text-[12px] text-white placeholder-gray-600 focus:outline-none focus:border-brand-primary/50"
+          />
+          {tooShort && (
+            <p className="mt-1 text-[11px] text-amber-400">
+              Password must be at least 12 characters.
+            </p>
+          )}
+          {sameAsCurrent && (
+            <p className="mt-1 text-[11px] text-amber-400">
+              New password must be different from the current one.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-medium text-gray-400 mb-1">
+            Confirm new password
+          </label>
+          <input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
+            className="w-full px-3 py-1.5 rounded-lg bg-[#09090B] border border-white/[0.08] text-[12px] text-white placeholder-gray-600 focus:outline-none focus:border-brand-primary/50"
+          />
+          {mismatch && (
+            <p className="mt-1 text-[11px] text-amber-400">Passwords do not match.</p>
+          )}
+        </div>
+
+        {change.error && (
+          <div className="flex items-start gap-2 p-2 rounded-lg bg-red-500/[0.08] border border-red-500/[0.2]">
+            <AlertCircle size={14} className="text-red-400 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-red-300">{readErrorMessage(change.error)}</p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className={clsx(
+              'px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1',
+              canSubmit
+                ? 'bg-brand-primary text-white hover:bg-brand-primary/90'
+                : 'bg-white/[0.05] text-gray-600 cursor-not-allowed'
+            )}
+          >
+            {change.isPending ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : savedFlash ? (
+              <Check size={12} />
+            ) : null}
+            {savedFlash ? 'Password updated' : 'Update password'}
+          </button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+// ----- Test connection button (per provider card header) -----
+
+function TestConnectionButton({ provider }: { provider: string }) {
+  const test = useTestProvider()
+  const result = test.data
+
+  function onClick() {
+    test.mutate(provider)
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {result && (
+        <span
+          className={clsx(
+            'inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded font-medium',
+            result.ok
+              ? 'bg-emerald-500/[0.12] text-emerald-400 border border-emerald-500/[0.2]'
+              : 'bg-red-500/[0.12] text-red-300 border border-red-500/[0.2]'
+          )}
+          title={result.message}
+        >
+          {result.ok ? <Check size={10} /> : <X size={10} />}
+          <span className="max-w-[260px] truncate">{result.message}</span>
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={test.isPending}
+        className={clsx(
+          'inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border transition-all',
+          test.isPending
+            ? 'text-gray-600 border-white/[0.05] cursor-not-allowed'
+            : 'text-gray-400 border-white/[0.08] hover:text-brand-primary hover:border-brand-primary/30 hover:bg-brand-primary/[0.06]'
+        )}
+        title="Verify the stored credentials by hitting the upstream API"
+      >
+        {test.isPending ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <Plug size={12} />
+        )}
+        Test connection
+      </button>
+    </div>
+  )
+}
+
 // ----- Audit log table -----
 
 function AuditLog() {
@@ -457,14 +641,18 @@ function AuthenticatedSettings({ username }: { username: string }) {
           {PROVIDER_GROUPS.map((group) => {
             const items = grouped.get(group.provider) || []
             if (items.length === 0) return null
+            const allSet = items.every((s) => s.is_set)
             return (
               <section
                 key={group.provider}
                 className="rounded-2xl border border-white/[0.08] bg-[#0C0C0E] p-5"
               >
-                <div className="mb-2">
-                  <h2 className="text-sm font-semibold text-white">{group.title}</h2>
-                  <p className="text-[11px] text-gray-500">{group.description}</p>
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-white">{group.title}</h2>
+                    <p className="text-[11px] text-gray-500">{group.description}</p>
+                  </div>
+                  {allSet && <TestConnectionButton provider={group.provider} />}
                 </div>
                 {items.map((secret) => (
                   <SecretRow key={secret.key} secret={secret} />
@@ -472,6 +660,8 @@ function AuthenticatedSettings({ username }: { username: string }) {
               </section>
             )
           })}
+
+          <ChangePasswordSection />
 
           <section className="rounded-2xl border border-white/[0.08] bg-[#0C0C0E] p-5">
             <div className="flex items-center gap-2 mb-3">

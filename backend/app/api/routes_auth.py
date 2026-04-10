@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from app.auth.middleware import require_admin
 from app.auth.passwords import (
     MIN_PASSWORD_LENGTH,
     WeakPasswordError,
@@ -18,6 +19,7 @@ from app.auth.users import (
     create_admin_user,
     get_admin_user,
     update_last_login,
+    update_password,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,11 @@ class SetupRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
 
 class MeResponse(BaseModel):
@@ -141,4 +148,47 @@ async def login(payload: LoginRequest, request: Request) -> dict:
 async def logout(request: Request) -> dict:
     """Clear the session cookie."""
     request.session.clear()
+    return {"ok": True}
+
+
+@router.post("/password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    actor: str = Depends(require_admin),
+) -> dict:
+    """Rotate the admin password.
+
+    Requires the current password even though the request is already
+    authenticated. This protects against an attacker who has stolen a
+    session cookie or someone walking up to an unattended browser tab.
+    """
+    db = request.app.state.db
+    user = await get_admin_user(db, actor)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
+        )
+
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="current password is incorrect",
+        )
+
+    if payload.current_password == payload.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="new password must differ from current password",
+        )
+
+    try:
+        new_hash = hash_password(payload.new_password)
+    except WeakPasswordError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    await update_password(db, user.username, new_hash)
+    logger.info("auth: admin password changed by %s from %s", actor, _client_ip(request))
     return {"ok": True}

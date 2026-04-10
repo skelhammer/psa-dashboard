@@ -16,7 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.auth.middleware import require_admin
+from app.config import get_settings
 from app.lifecycle.providers import rebuild_for_key
+from app.phone.factory import get_phone_provider
+from app.psa.factory import _create_provider
 from app.vault import audit
 from app.vault.keys import SECRET_KEYS, SECRET_KEY_NAMES, SecretKey
 
@@ -60,6 +63,12 @@ class AuditEntry(BaseModel):
     key: str
     ip: str | None
     user_agent: str | None
+
+
+class TestResult(BaseModel):
+    ok: bool
+    provider: str
+    message: str
 
 
 def _client_ip(request: Request) -> str:
@@ -173,3 +182,77 @@ async def list_audit(
     conn = await db.get_connection()
     rows = await audit.list_recent(conn, limit=limit)
     return [AuditEntry(**r) for r in rows]
+
+
+_VALID_TEST_PROVIDERS = {"superops", "zendesk", "zoom"}
+
+
+@router.post("/secrets/test/{provider}", response_model=TestResult)
+async def test_provider(
+    provider: str,
+    request: Request,
+    _: str = Depends(require_admin),
+) -> TestResult:
+    """Verify the currently stored credentials for a provider work.
+
+    Constructs a fresh provider via the factory using the values currently
+    in the vault, then calls a small read endpoint (get_technicians for
+    PSA, get_users for phone). The provider is discarded after the test;
+    no state is mutated. The current value to test is whatever is in the
+    vault, never something the caller passes in (avoids credential
+    oracle attacks).
+    """
+    name = provider.lower()
+    if name not in _VALID_TEST_PROVIDERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown provider: {provider}",
+        )
+
+    settings = get_settings()
+    vault = request.app.state.vault
+
+    try:
+        if name in ("superops", "zendesk"):
+            psa = await _create_provider(name, settings, vault)
+            techs = await psa.get_technicians()
+            return TestResult(
+                ok=True,
+                provider=name,
+                message=f"Connected, found {len(techs)} technician(s)",
+            )
+
+        # name == "zoom"
+        # Force-build the zoom provider regardless of phone.provider setting
+        # so the user can test credentials before flipping the switch.
+        from app.phone.zoom import ZoomPhoneProvider
+        account_id = await vault.get("phone.zoom.account_id") or ""
+        client_id = await vault.get("phone.zoom.client_id") or ""
+        client_secret = await vault.get("phone.zoom.client_secret") or ""
+        if not (account_id and client_id and client_secret):
+            return TestResult(
+                ok=False,
+                provider="zoom",
+                message="Zoom credentials are not all set yet",
+            )
+        zoom = ZoomPhoneProvider(
+            account_id=account_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            timezone=settings.server.timezone,
+        )
+        users = await zoom.get_users()
+        return TestResult(
+            ok=True,
+            provider="zoom",
+            message=f"Connected, found {len(users)} user(s)",
+        )
+    except Exception as exc:
+        # Return the upstream error message but never the credentials.
+        msg = str(exc) or exc.__class__.__name__
+        # Trim suspiciously long error messages so a token does not leak
+        # if the upstream error happens to echo it back.
+        if len(msg) > 300:
+            msg = msg[:300] + "..."
+        logger.warning("provider test failed for %s: %s", name, msg)
+        return TestResult(ok=False, provider=name, message=msg)

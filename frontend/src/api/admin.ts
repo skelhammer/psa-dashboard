@@ -42,6 +42,12 @@ export type AuditEntry = {
   user_agent: string | null
 }
 
+export type TestResult = {
+  ok: boolean
+  provider: string
+  message: string
+}
+
 // ----- Auth hooks -----
 
 export function useMe() {
@@ -86,6 +92,13 @@ export function useLogout() {
       qc.invalidateQueries({ queryKey: ['auth', 'me'] })
       qc.removeQueries({ queryKey: ['admin'] })
     },
+  })
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (vars: { current_password: string; new_password: string }) =>
+      api.post('/auth/password', vars).then(r => r.data),
   })
 }
 
@@ -142,5 +155,14 @@ export function useAudit(enabled: boolean) {
     queryFn: () => api.get<AuditEntry[]>('/admin/audit').then(r => r.data),
     enabled,
     retry: false,
+  })
+}
+
+export function useTestProvider() {
+  return useMutation({
+    mutationFn: (provider: string) =>
+      api
+        .post<TestResult>(`/admin/secrets/test/${encodeURIComponent(provider)}`)
+        .then(r => r.data),
   })
 }

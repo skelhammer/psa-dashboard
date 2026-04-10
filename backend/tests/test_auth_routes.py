@@ -153,6 +153,71 @@ def test_logout_clears_session(client: TestClient):
     assert client.get("/api/auth/me").json()["authenticated"] is False
 
 
+def test_change_password_requires_auth(client: TestClient):
+    r = client.post(
+        "/api/auth/password",
+        json={"current_password": "x", "new_password": "yyyyyyyyyyyy"},
+    )
+    assert r.status_code == 401
+
+
+def test_change_password_success(client: TestClient):
+    client.post("/api/auth/setup", json={"password": "the-original-password"})
+    r = client.post(
+        "/api/auth/password",
+        json={
+            "current_password": "the-original-password",
+            "new_password": "the-replacement-password",
+        },
+    )
+    assert r.status_code == 200
+
+    # Old password should now fail
+    client.cookies.clear()
+    r = client.post("/api/auth/login", json={"password": "the-original-password"})
+    assert r.status_code == 401
+
+    # New password should succeed
+    r = client.post("/api/auth/login", json={"password": "the-replacement-password"})
+    assert r.status_code == 200
+
+
+def test_change_password_wrong_current_rejected(client: TestClient):
+    client.post("/api/auth/setup", json={"password": "the-original-password"})
+    r = client.post(
+        "/api/auth/password",
+        json={
+            "current_password": "wrong-original-pwd",
+            "new_password": "the-replacement-password",
+        },
+    )
+    assert r.status_code == 401
+
+
+def test_change_password_same_password_rejected(client: TestClient):
+    client.post("/api/auth/setup", json={"password": "the-original-password"})
+    r = client.post(
+        "/api/auth/password",
+        json={
+            "current_password": "the-original-password",
+            "new_password": "the-original-password",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_change_password_short_new_password_rejected(client: TestClient):
+    client.post("/api/auth/setup", json={"password": "the-original-password"})
+    r = client.post(
+        "/api/auth/password",
+        json={
+            "current_password": "the-original-password",
+            "new_password": "tooshort",
+        },
+    )
+    assert r.status_code == 422  # pydantic validation
+
+
 def test_login_rate_limited_after_5_failures(client: TestClient, app: FastAPI):
     client.post("/api/auth/setup", json={"password": "the-correct-password-12"})
     client.cookies.clear()
@@ -288,6 +353,44 @@ def test_delete_missing_secret_returns_404(client: TestClient):
     client.post("/api/auth/setup", json={"password": "the-correct-password-12"})
     r = client.delete("/api/admin/secrets/psa.superops.api_token")
     assert r.status_code == 404
+
+
+def test_test_endpoint_requires_auth(client: TestClient):
+    r = client.post("/api/admin/secrets/test/superops")
+    assert r.status_code == 401
+
+
+def test_test_endpoint_unknown_provider(client: TestClient):
+    client.post("/api/auth/setup", json={"password": "the-correct-password-12"})
+    r = client.post("/api/admin/secrets/test/notreal")
+    assert r.status_code == 400
+
+
+def test_test_endpoint_zoom_returns_not_set_when_blank(client: TestClient):
+    """Zoom test reports a clear 'not set' instead of crashing when blank."""
+    client.post("/api/auth/setup", json={"password": "the-correct-password-12"})
+    r = client.post("/api/admin/secrets/test/zoom")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "not all set" in body["message"]
+
+
+def test_test_endpoint_does_not_accept_inline_value(client: TestClient):
+    """The endpoint must not accept a credential to test in the request body.
+    The currently stored value (or nothing) is what gets tested. Passing a
+    value to test would turn the endpoint into a credential validation oracle.
+    """
+    client.post("/api/auth/setup", json={"password": "the-correct-password-12"})
+    # Even with a body, the endpoint should ignore it and use stored values.
+    # We assert by checking the request still works (no schema rejection)
+    # and the test result is identical to a request with no body.
+    r1 = client.post("/api/admin/secrets/test/zoom")
+    r2 = client.post(
+        "/api/admin/secrets/test/zoom",
+        json={"value": "fake-credential-attempt"},
+    )
+    assert r1.json() == r2.json()
 
 
 def test_audit_log_shows_set_and_delete_events(client: TestClient):
