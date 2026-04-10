@@ -277,31 +277,54 @@ async def sync_conversations_for_open_tickets(
 
     Only syncs conversations for tickets owned by the current provider
     in active statuses, to avoid calling the wrong API.
+
+    Capped per sync to limit external API call volume. Prioritizes tickets
+    where the ticket has been updated since the last conversation pull
+    (or has never had one), so newly active tickets are picked up first
+    and idle ones rotate through over multiple syncs.
     """
     import asyncio
 
-    # Get open tickets scoped to this provider
+    # Cap how many conversation API calls we make per sync. With one call
+    # per ticket and a 15-min sync cadence, 15 keeps us well under most
+    # PSA rate limits even on noisy days.
+    MAX_CONVERSATION_FETCHES = 15
+
+    # Order: tickets whose updated_time is newer than last_conversation_time
+    # (or which have never been pulled) come first, then by recency.
     closed = get_closed_statuses_sql()
+    base_sql = f"""
+        SELECT id FROM tickets
+        WHERE status NOT IN {closed}
+          {{provider_filter}}
+        ORDER BY
+            CASE
+                WHEN last_conversation_time IS NULL THEN 0
+                WHEN updated_time > last_conversation_time THEN 0
+                ELSE 1
+            END,
+            updated_time DESC
+        LIMIT ?
+    """
+
     if provider_name:
         open_tickets = await conn.execute_fetchall(
-            f"""SELECT id FROM tickets
-               WHERE status NOT IN {closed} AND provider = ?
-               ORDER BY updated_time DESC
-               LIMIT 50""",
-            (provider_name,),
+            base_sql.format(provider_filter="AND provider = ?"),
+            (provider_name, MAX_CONVERSATION_FETCHES),
         )
     else:
         open_tickets = await conn.execute_fetchall(
-            f"""SELECT id FROM tickets
-               WHERE status NOT IN {closed}
-               ORDER BY updated_time DESC
-               LIMIT 50"""
+            base_sql.format(provider_filter=""),
+            (MAX_CONVERSATION_FETCHES,),
         )
 
     if not open_tickets:
         return
 
-    logger.info("Syncing conversations for %d open tickets", len(open_tickets))
+    logger.info(
+        "Syncing conversations for %d open tickets (cap=%d)",
+        len(open_tickets), MAX_CONVERSATION_FETCHES,
+    )
 
     # Batch conversation fetches (concurrent but limited)
     semaphore = asyncio.Semaphore(5)

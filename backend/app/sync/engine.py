@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 # early commit() from engine A would capture engine B's partial data.
 _sync_lock = asyncio.Lock()
 
+# Small breather between paginated PSA requests during a sync. Keeps
+# us well below typical PSA rate limits even when full-syncing 100+ pages.
+PAGE_FETCH_DELAY_SECONDS = 0.15
+
 
 def _get_closed_statuses() -> list[str]:
     return get_settings().server.closed_statuses
@@ -290,6 +294,9 @@ class SyncEngine:
             if not result.has_more:
                 break
             page += 1
+            # Pace consecutive page fetches so a 100-page full sync
+            # is not a tight burst against the PSA API.
+            await asyncio.sleep(PAGE_FETCH_DELAY_SECONDS)
 
         return total, synced_ids
 
@@ -351,6 +358,7 @@ class SyncEngine:
             if not result.has_more:
                 break
             page += 1
+            await asyncio.sleep(PAGE_FETCH_DELAY_SECONDS)
 
         # Safety check: if remote returned very few tickets compared to local,
         # something might be wrong with the API. Skip pruning.
@@ -380,7 +388,9 @@ class SyncEngine:
     async def _refresh_flagged_tickets(self, conn: aiosqlite.Connection) -> int:
         """Re-fetch tickets with open billing flags to catch worklog updates.
 
-        Scoped to current provider only.
+        Scoped to current provider only. Batches native IDs into chunks
+        and issues one provider call per chunk to minimize API requests
+        (SuperOps GraphQL "includes" filter, Zendesk show_many.json).
         """
         flagged = await conn.execute_fetchall(
             """SELECT DISTINCT t.id
@@ -392,14 +402,31 @@ class SyncEngine:
         if not flagged:
             return 0
 
-        prefixed_ids = [row[0] for row in flagged]
-        logger.info("[%s] Refreshing %d tickets with open billing flags", self.provider_name, len(prefixed_ids))
+        native_ids = [_unprefix(row[0]) for row in flagged]
+        logger.info(
+            "[%s] Refreshing %d tickets with open billing flags",
+            self.provider_name, len(native_ids),
+        )
 
+        # Chunk size: 100 fits Zendesk show_many's per-call cap and is
+        # well within SuperOps' GraphQL list query page size.
+        chunk_size = 100
         refreshed = 0
-        for prefixed_id in prefixed_ids:
-            native_id = _unprefix(prefixed_id)
-            filters = TicketFilter(page=1, page_size=1, ticket_ids=[native_id])
-            result = await self.provider.get_tickets(filters)
+        for i in range(0, len(native_ids), chunk_size):
+            chunk = native_ids[i : i + chunk_size]
+            filters = TicketFilter(
+                page=1,
+                page_size=len(chunk),
+                ticket_ids=chunk,
+            )
+            try:
+                result = await self.provider.get_tickets(filters)
+            except Exception as e:
+                logger.warning(
+                    "[%s] Flagged refresh chunk failed (size=%d): %s",
+                    self.provider_name, len(chunk), e,
+                )
+                continue
             for ticket in result.items:
                 await self._upsert_ticket(conn, ticket)
                 refreshed += 1

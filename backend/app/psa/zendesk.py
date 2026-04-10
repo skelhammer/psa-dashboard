@@ -302,16 +302,31 @@ class ZendeskProvider(PSAProvider):
 
         # Build search query based on filters
         if filters.ticket_ids:
-            # Fetch specific tickets by ID
-            tickets = []
-            for tid in filters.ticket_ids:
+            # Bulk fetch via /tickets/show_many.json (up to 100 ids per call)
+            # instead of one /tickets/{id}.json call per id. Saves dozens of
+            # API calls when refreshing flagged tickets.
+            tickets: list[dict] = []
+            metrics: dict[int, dict] = {}
+            ids_list = list(filters.ticket_ids)
+            for i in range(0, len(ids_list), BATCH_SIZE):
+                batch = ids_list[i : i + BATCH_SIZE]
+                url = f"{self.base_url}/tickets/show_many.json"
+                params = {
+                    "ids": ",".join(str(tid) for tid in batch),
+                    "include": "metric_sets",
+                }
                 try:
-                    data = await self._get(f"{self.base_url}/tickets/{tid}.json")
-                    raw_ticket = data.get("ticket")
-                    if raw_ticket:
+                    data = await self._get(url, params)
+                    for raw_ticket in data.get("tickets", []):
                         tickets.append(raw_ticket)
+                        # show_many sideloads metric_set inline; capture it
+                        # so SLA fields populate without a second API call.
+                        tid = raw_ticket.get("id")
+                        metric_set = raw_ticket.get("metric_set")
+                        if tid and metric_set:
+                            metrics[tid] = metric_set
                 except Exception as e:
-                    logger.warning("Failed to fetch ticket %s: %s", tid, e)
+                    logger.warning("Failed to fetch ticket batch %s: %s", batch[:3], e)
             # Sideload users and orgs
             user_ids = set()
             org_ids = set()
@@ -324,7 +339,7 @@ class ZendeskProvider(PSAProvider):
                     org_ids.add(t["organization_id"])
             users = await self._batch_fetch_users(user_ids)
             orgs = await self._batch_fetch_organizations(org_ids)
-            items = [self._ticket_to_model(t, users, orgs) for t in tickets]
+            items = [self._ticket_to_model(t, users, orgs, metrics) for t in tickets]
             return PaginatedResult(items=items, page=1, page_size=len(items), has_more=False, total_count=len(items))
 
         if filters.updated_since:

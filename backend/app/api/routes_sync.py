@@ -2,9 +2,34 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter(prefix="/api", tags=["sync"])
+
+# Manual sync debounce: reject repeated trigger requests within this window.
+# Protects PSA/phone APIs from being hammered if a user click-spams the
+# Sync button. The scheduler still runs on its normal interval regardless.
+MANUAL_SYNC_MIN_INTERVAL_SECONDS = 60
+MANUAL_FULL_SYNC_MIN_INTERVAL_SECONDS = 300
+
+# Module-level state: timestamp of the last manual trigger of each kind.
+_last_manual_trigger: dict[str, datetime] = {}
+
+
+def _check_debounce(kind: str, min_interval: int) -> None:
+    """Raise 429 if a manual sync of this kind was triggered too recently."""
+    last = _last_manual_trigger.get(kind)
+    now = datetime.now()
+    if last and (now - last) < timedelta(seconds=min_interval):
+        retry_after = int(min_interval - (now - last).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"Manual {kind} sync was triggered recently; retry in {retry_after}s",
+            headers={"Retry-After": str(retry_after)},
+        )
+    _last_manual_trigger[kind] = now
 
 
 async def _get_last_sync(request: Request) -> str | None:
@@ -38,6 +63,9 @@ async def health(request: Request):
 @router.post("/sync/trigger")
 async def trigger_sync(request: Request):
     scheduler = request.app.state.scheduler
+    if scheduler.is_syncing:
+        raise HTTPException(status_code=409, detail="Sync already in progress")
+    _check_debounce("incremental", MANUAL_SYNC_MIN_INTERVAL_SECONDS)
     result = await scheduler.trigger_sync()
     return result
 
@@ -46,6 +74,9 @@ async def trigger_sync(request: Request):
 async def trigger_full_sync(request: Request):
     """Trigger a full sync that re-fetches all tickets and removes deleted ones."""
     scheduler = request.app.state.scheduler
+    if scheduler.is_syncing:
+        raise HTTPException(status_code=409, detail="Sync already in progress")
+    _check_debounce("full", MANUAL_FULL_SYNC_MIN_INTERVAL_SECONDS)
     result = await scheduler.trigger_full_sync()
     return result
 

@@ -351,9 +351,17 @@ class ZoomPhoneProvider(PhoneProvider):
         """Fetch call logs in 30-day chunks when range exceeds the API limit."""
         all_calls: list[Call] = []
         chunk_start = from_date
+        first_chunk = True
 
         while chunk_start < to_date:
             chunk_end = min(chunk_start + timedelta(days=MAX_RANGE_DAYS), to_date)
+            # Extra breather between chunks (on top of the per-request
+            # RATE_LIMIT_DELAY in _request) so a multi-month backfill
+            # does not bunch requests against the 30 req/sec ceiling.
+            if not first_chunk:
+                await asyncio.sleep(0.5)
+            first_chunk = False
+
             logger.info(
                 "Fetching Zoom call logs chunk: %s to %s",
                 chunk_start.strftime("%Y-%m-%d"),
