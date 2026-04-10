@@ -2,7 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useSyncStatus, useTriggerSync, useTriggerFullSync } from '../api/hooks'
 import {
   LayoutDashboard, Target, ListOrdered, Users, Receipt, Building2,
-  RefreshCw, RefreshCcw, Zap, FileBarChart, Phone, FileText
+  RefreshCw, RefreshCcw, Zap, FileBarChart, Phone, FileText, Settings as SettingsIcon
 } from 'lucide-react'
 import AlertBanner from './AlertBanner'
 import clsx from 'clsx'
@@ -17,6 +17,10 @@ const navItems = [
   { to: '/clients', label: 'Client Health', icon: Building2 },
   { to: '/contracts', label: 'Contracts', icon: FileText },
   { to: '/phone', label: 'Phone Analytics', icon: Phone },
+]
+
+const footerNavItems = [
+  { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
 function timeAgo(dateStr: string): string {
@@ -87,6 +91,37 @@ export default function Layout() {
             )
           })}
         </nav>
+
+        {/* Footer nav (Settings, etc.) */}
+        <div className="px-3 pt-2 pb-1 border-t border-white/[0.08] space-y-1">
+          {footerNavItems.map(item => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  clsx(
+                    'group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150',
+                    isActive
+                      ? 'bg-brand-primary/[0.12] text-brand-primary-light border border-brand-primary/[0.15]'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.05] border border-transparent'
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon size={16} className={clsx(
+                      'transition-colors duration-150',
+                      isActive ? 'text-brand-primary' : 'text-gray-600 group-hover:text-gray-400'
+                    )} />
+                    {item.label}
+                  </>
+                )}
+              </NavLink>
+            )
+          })}
+        </div>
 
         {/* Provider info */}
         <div className="px-4 py-3 border-t border-white/[0.08]">

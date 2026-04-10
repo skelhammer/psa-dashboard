@@ -12,6 +12,7 @@ import ClientDetail from './pages/ClientDetail'
 import ExecutiveReport from './pages/ExecutiveReport'
 import PhoneAnalytics from './pages/PhoneAnalytics'
 import Contracts from './pages/Contracts'
+import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/executive" element={<ExecutiveReport />} />
           <Route path="/phone" element={<PhoneAnalytics />} />
           <Route path="/contracts" element={<Contracts />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>
     </FilterProvider>
