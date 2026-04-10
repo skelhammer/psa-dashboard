@@ -606,11 +606,24 @@ class SyncEngine:
         pn = self.provider_name
         now = datetime.now().isoformat()
         for contract in contracts:
+            # Preserve manual overrides: only insert new rows or update rows whose
+            # source is still 'synced'. Rows flagged 'manual' are untouched.
             await conn.execute(
-                """INSERT OR REPLACE INTO client_contracts
+                """INSERT INTO client_contracts
                    (contract_id, client_id, client_name, contract_type, contract_name,
-                    status, start_date, end_date, provider, synced_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    status, start_date, end_date, provider, synced_at, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+                   ON CONFLICT(contract_id) DO UPDATE SET
+                       client_id = excluded.client_id,
+                       client_name = excluded.client_name,
+                       contract_type = excluded.contract_type,
+                       contract_name = excluded.contract_name,
+                       status = excluded.status,
+                       start_date = excluded.start_date,
+                       end_date = excluded.end_date,
+                       provider = excluded.provider,
+                       synced_at = excluded.synced_at
+                   WHERE client_contracts.source != 'manual'""",
                 (
                     _prefix(pn, contract.contract_id),
                     _prefix(pn, contract.client_id),

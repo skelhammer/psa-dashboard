@@ -285,6 +285,10 @@ MIGRATIONS = [
     "ALTER TABLE phone_agent_daily ADD COLUMN abandoned_calls INTEGER DEFAULT 0",
     # First Call Resolution custom field
     "ALTER TABLE tickets ADD COLUMN fcr INTEGER NOT NULL DEFAULT 0",
+    # Contract management: manual entries, term length, salesperson notes
+    "ALTER TABLE client_contracts ADD COLUMN term_length_years INTEGER",
+    "ALTER TABLE client_contracts ADD COLUMN source TEXT NOT NULL DEFAULT 'synced'",
+    "ALTER TABLE client_contracts ADD COLUMN notes TEXT",
 ]
 
 

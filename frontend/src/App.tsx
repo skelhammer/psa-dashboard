@@ -11,6 +11,7 @@ import ClientHealth from './pages/ClientHealth'
 import ClientDetail from './pages/ClientDetail'
 import ExecutiveReport from './pages/ExecutiveReport'
 import PhoneAnalytics from './pages/PhoneAnalytics'
+import Contracts from './pages/Contracts'
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/clients/:clientId" element={<ClientDetail />} />
           <Route path="/executive" element={<ExecutiveReport />} />
           <Route path="/phone" element={<PhoneAnalytics />} />
+          <Route path="/contracts" element={<Contracts />} />
         </Route>
       </Routes>
     </FilterProvider>

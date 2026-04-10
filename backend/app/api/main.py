@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
     from app.api.routes_executive import router as executive_router
     from app.api.routes_phone import router as phone_router
     from app.api.routes_alerts import router as alerts_router
+    from app.api.routes_contracts import router as contracts_router
 
     app.include_router(sync_router)
     app.include_router(filters_router)
@@ -135,5 +136,6 @@ def create_app() -> FastAPI:
     app.include_router(executive_router)
     app.include_router(phone_router)
     app.include_router(alerts_router)
+    app.include_router(contracts_router)
 
     return app

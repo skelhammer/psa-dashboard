@@ -337,3 +337,67 @@ export function usePhoneSyncStatus() {
     refetchInterval: 30000,
   })
 }
+
+// Contracts
+export function useContracts(filter: string, plan: string, search?: string) {
+  return useQuery({
+    queryKey: ['contracts', filter, plan, search || ''],
+    queryFn: () =>
+      api
+        .get('/contracts', { params: { filter, plan, ...(search ? { search } : {}) } })
+        .then(r => r.data),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useContractClientPicker() {
+  return useQuery({
+    queryKey: ['contract-client-picker'],
+    queryFn: () => api.get('/contracts/clients').then(r => r.data),
+    staleTime: 120_000,
+  })
+}
+
+type ContractPayload = {
+  client_id?: string
+  contract_name?: string | null
+  contract_type?: string
+  start_date?: string | null
+  end_date?: string | null
+  term_length_years?: number | null
+  notes?: string | null
+  status?: string
+}
+
+export function useCreateContract() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: ContractPayload) =>
+      api.post('/contracts', body).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contracts'] })
+    },
+  })
+}
+
+export function useUpdateContract() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ contractId, ...body }: ContractPayload & { contractId: string }) =>
+      api.patch(`/contracts/${encodeURIComponent(contractId)}`, body).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contracts'] })
+    },
+  })
+}
+
+export function useDeleteContract() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (contractId: string) =>
+      api.delete(`/contracts/${encodeURIComponent(contractId)}`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contracts'] })
+    },
+  })
+}
