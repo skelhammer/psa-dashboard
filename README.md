@@ -23,7 +23,7 @@ A real-time helpdesk metrics dashboard that syncs with your PSA (Professional Se
 - **SuperOps:** Full support (tickets, clients, technicians, contracts, conversations)
 - **Zendesk:** Full support (tickets, organizations, agents, comments, custom statuses, Corp tagging, extra agents)
 - **Mock:** Built-in mock data for testing without API credentials
-- Architecture supports adding new providers (HaloPSA stub included)
+- Architecture supports adding new providers via the abstract `PSAProvider` base class
 
 ### Multi-Provider Features
 - **Provider toggle:** Frontend segmented button to view All, SuperOps only, or Zendesk only
@@ -202,26 +202,46 @@ On first launch, the backend runs a full sync from your PSA provider(s), which m
 ```
 psa-dashboard/
   install.sh                 # Ubuntu production installer (systemd + nginx)
+  update.sh                  # Pull and rebuild script
   start.bat                  # Windows launch script
   start.sh                   # Linux/macOS launch script
-  update.sh                  # Pull and rebuild script
   config.example.yaml        # Template config (tracked)
-  config.yaml                # Your config with secrets (gitignored)
+  config.yaml                # Your non-secret config (gitignored)
+  deploy/
+    SECRETS-DEPLOYMENT.md    # Live-server credentials migration runbook
   backend/
     run.py                   # Entry point
     requirements.txt         # Python dependencies
+    pytest.ini               # Test runner config
     app/
-      api/                   # FastAPI routes and dependencies
+      api/                   # FastAPI routes (overview, queue, billing, ...,
+                             # auth, admin_secrets)
       psa/                   # PSA provider abstraction
         base.py              # Abstract base class
         superops.py          # SuperOps GraphQL implementation
         zendesk.py           # Zendesk REST API v2 implementation
         mock.py              # Mock data provider
-        factory.py           # Multi-provider factory
+        factory.py           # Async factory; pulls credentials from vault
       phone/                 # Phone provider abstraction
         base.py              # Abstract base class
         zoom.py              # Zoom Phone implementation
         mock.py              # Mock data provider
+        factory.py           # Async factory; pulls credentials from vault
+      vault/                 # Encrypted credentials store (AES-256-GCM)
+        crypto.py            # KEK/DEK key wrapping primitives
+        manager.py           # SecretsManager: get/set/delete/list
+        keys.py              # Canonical SECRET_KEYS registry
+        migrate.py           # One-time plaintext yaml -> vault migration
+        audit.py             # Mutation audit log
+        cli.py               # Advanced: generate-kek, rotate-kek, set-admin-password
+      auth/                  # Single-user admin authentication
+        passwords.py         # bcrypt + constant-time verify
+        session.py           # Session signing key bootstrap
+        users.py             # users table operations
+        ratelimit.py         # Sliding window login rate limiter
+        middleware.py        # require_admin FastAPI dependency
+      lifecycle/
+        providers.py         # Hot reload providers when credentials change
       alerts/                # Threshold-based alert engine
       sync/                  # Sync engine, hooks, phone sync
         engine.py            # Per-provider sync with ID prefixing
@@ -233,12 +253,18 @@ psa-dashboard/
       models.py              # PSA-agnostic data models
     data/
       metrics.db             # SQLite database (auto-created, gitignored)
+      .vault_master_key      # Auto-generated, gitignored, BACK THIS UP
+      .session_signing_key   # Auto-generated, gitignored
+    tests/                   # Pytest suite (vault, auth, migration, admin routes)
   frontend/
     src/
       api/                   # API client and React Query hooks
+        client.ts            # Axios instance with credentials enabled
+        hooks.ts             # Dashboard data hooks
+        admin.ts             # Auth + admin secrets hooks
       components/            # Shared UI components
       context/               # Filter state context (provider, corp, dates)
-      pages/                 # Page components
+      pages/                 # Page components (Overview, ..., Settings)
       utils/                 # Formatting helpers and constants
 ```
 
