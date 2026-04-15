@@ -62,7 +62,6 @@ while [[ "$HOME_DIR" != "/" ]]; do
     HOME_DIR="$(dirname "$HOME_DIR")"
 done
 chmod o+x "$APP_DIR"
-chmod -R o+rX "$APP_DIR/frontend/dist"
 
 # ---------- backend venv ----------
 echo "[3/6] Setting up Python virtual environment..."
@@ -75,6 +74,7 @@ echo "[4/6] Building frontend for production..."
 cd "$APP_DIR/frontend"
 sudo -u "$APP_USER" npm install --no-fund --no-audit 2>/dev/null
 sudo -u "$APP_USER" npm run build 2>/dev/null
+chmod -R o+rX "$APP_DIR/frontend/dist"
 echo "       Frontend built to ${APP_DIR}/frontend/dist"
 
 # ---------- systemd service ----------
