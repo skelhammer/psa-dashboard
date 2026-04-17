@@ -16,7 +16,7 @@ from app.auth.passwords import (
 )
 from app.auth.users import (
     any_admin_exists,
-    create_admin_user,
+    create_admin_user_if_none_exists,
     get_admin_user,
     update_last_login,
     update_password,
@@ -92,6 +92,11 @@ async def setup_admin(payload: SetupRequest, request: Request) -> dict:
 
     After this endpoint succeeds, subsequent calls return 403 Forbidden.
     The created user is automatically logged in (session cookie set).
+
+    The fast-path check lets us short-circuit without running bcrypt when an
+    admin clearly already exists. The authoritative guard is the atomic
+    INSERT inside create_admin_user_if_none_exists, which handles the race
+    where two concurrent requests both pass the fast-path check.
     """
     db = request.app.state.db
     if await any_admin_exists(db):
@@ -105,7 +110,16 @@ async def setup_admin(payload: SetupRequest, request: Request) -> dict:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
-    user = await create_admin_user(db, "admin", pw_hash)
+    user = await create_admin_user_if_none_exists(db, "admin", pw_hash)
+    if user is None:
+        # A concurrent setup request won the race.
+        logger.warning(
+            "auth: concurrent setup attempt rejected from %s", _client_ip(request)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="admin user already exists; use /api/auth/login",
+        )
     _set_session(request, user.username)
     logger.info("auth: initial admin user created from %s", _client_ip(request))
     return {"ok": True, "username": user.username}

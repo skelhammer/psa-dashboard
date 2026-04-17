@@ -76,6 +76,36 @@ async def create_admin_user(
     )
 
 
+async def create_admin_user_if_none_exists(
+    db: Database, username: str, password_hash: str
+) -> AdminUser | None:
+    """Atomically create the initial admin user iff no admin exists yet.
+
+    Uses INSERT ... SELECT ... WHERE NOT EXISTS so the existence check and
+    the insert happen in a single SQLite statement. Returns None if an
+    admin row already existed (i.e. a concurrent request beat us to it).
+    Callers should treat None as a 403 condition.
+    """
+    conn = await db.get_connection()
+    now = _iso_now()
+    cursor = await conn.execute(
+        """INSERT INTO users (username, password_hash, role, created_at)
+           SELECT ?, ?, 'admin', ?
+           WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin')""",
+        (username, password_hash, now),
+    )
+    await conn.commit()
+    if (cursor.rowcount or 0) == 0:
+        return None
+    return AdminUser(
+        username=username,
+        password_hash=password_hash,
+        role="admin",
+        created_at=now,
+        last_login_at=None,
+    )
+
+
 async def update_password(
     db: Database, username: str, new_password_hash: str
 ) -> bool:
