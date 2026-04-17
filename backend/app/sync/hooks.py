@@ -1,7 +1,15 @@
 """Post-sync hooks: billing flags, conversation sync, reopened detection.
 
 These run after the main sync commits and operate on SQLite data.
-They work identically regardless of which PSA provider ran the sync.
+
+Each hook that mutates provider-specific rows (tickets, clients, contracts,
+billing_config, billing_flags) accepts the syncing provider's name and scopes
+its queries accordingly, so a SuperOps sync never touches Zendesk rows and
+vice-versa. Hooks whose output is a cross-provider rollup (MTZ snapshots)
+stay unscoped by design.
+
+Passing provider_name="" (the default) preserves the legacy global behavior
+for ad-hoc/CLI invocations that do not know the provider.
 """
 
 from __future__ import annotations
@@ -17,33 +25,48 @@ from app.psa.base import PSAProvider
 logger = logging.getLogger(__name__)
 
 
-async def run_post_sync_hooks(conn: aiosqlite.Connection, provider: PSAProvider, provider_name: str = ""):
-    """Run all post-sync hooks."""
-    await backfill_resolution_time(conn)
-    await sync_billing_config(conn)
-    await generate_billing_flags(conn)
+def _provider_filter(provider_name: str, column: str = "provider") -> tuple[str, list]:
+    """Build an optional provider-scoping SQL fragment.
+
+    Returns ("", []) when provider_name is empty so the caller can inline
+    the result without conditionals.
+    """
+    if not provider_name:
+        return "", []
+    return f" AND {column} = ?", [provider_name]
+
+
+async def run_post_sync_hooks(
+    conn: aiosqlite.Connection, provider: PSAProvider, provider_name: str = ""
+):
+    """Run all post-sync hooks, scoped to the syncing provider."""
+    await backfill_resolution_time(conn, provider_name)
+    await sync_billing_config(conn, provider_name)
+    await generate_billing_flags(conn, provider_name)
     await sync_conversations_for_open_tickets(conn, provider, provider_name)
     await record_mtz_snapshots(conn)
 
 
-async def backfill_resolution_time(conn: aiosqlite.Connection):
+async def backfill_resolution_time(conn: aiosqlite.Connection, provider_name: str = ""):
     """Backfill resolution_time from updated_time for closed tickets missing it.
 
     Old imported tickets often lack resolution_time. Using updated_time as a
     fallback keeps closed-ticket queries accurate without COALESCE everywhere.
     """
     closed = get_closed_statuses_sql()
+    provider_clause, provider_params = _provider_filter(provider_name)
     result = await conn.execute(
         f"""UPDATE tickets SET resolution_time = updated_time
            WHERE status IN {closed}
              AND resolution_time IS NULL
-             AND updated_time IS NOT NULL"""
+             AND updated_time IS NOT NULL{provider_clause}""",
+        provider_params,
     )
     if result.rowcount:
         logger.info("Backfilled resolution_time for %d closed tickets", result.rowcount)
 
 
-async def sync_billing_config(conn: aiosqlite.Connection):
+async def sync_billing_config(conn: aiosqlite.Connection, provider_name: str = ""):
     """Auto-create/update billing_config for clients based on contract whitelist.
 
     All active clients are treated as hourly (billable) by default. Clients with
@@ -56,8 +79,9 @@ async def sync_billing_config(conn: aiosqlite.Connection):
     settings = get_settings()
     unlimited_plans = settings.billing.unlimited_plans
     now = datetime.now().isoformat()
+    provider_clause, provider_params = _provider_filter(provider_name)
 
-    # Build set of client IDs on unlimited plans
+    # Build set of client IDs on unlimited plans (scoped to this provider)
     excluded_ids: set[str] = set()
     if unlimited_plans:
         placeholders = ",".join("?" for _ in unlimited_plans)
@@ -65,16 +89,18 @@ async def sync_billing_config(conn: aiosqlite.Connection):
         # Check contract_name first
         contract_rows = await conn.execute_fetchall(
             f"""SELECT DISTINCT client_id FROM client_contracts
-                WHERE status = 'active' AND contract_name IN ({placeholders})""",
-            unlimited_plans,
+                WHERE status = 'active' AND contract_name IN ({placeholders})
+                {provider_clause}""",
+            [*unlimited_plans, *provider_params],
         )
         excluded_ids.update(row[0] for row in contract_rows)
 
         # Fall back to clients.plan custom field for clients not already excluded
         plan_rows = await conn.execute_fetchall(
             f"""SELECT id FROM clients
-                WHERE stage = 'Active' AND plan IN ({placeholders})""",
-            unlimited_plans,
+                WHERE stage = 'Active' AND plan IN ({placeholders})
+                {provider_clause}""",
+            [*unlimited_plans, *provider_params],
         )
         excluded_ids.update(row[0] for row in plan_rows)
 
@@ -103,7 +129,8 @@ async def sync_billing_config(conn: aiosqlite.Connection):
 
     # All other active clients are billable (hourly)
     all_active = await conn.execute_fetchall(
-        "SELECT id FROM clients WHERE stage = 'Active'"
+        f"SELECT id FROM clients WHERE stage = 'Active'{provider_clause}",
+        provider_params,
     )
     billable_clients = [(row[0], "hourly") for row in all_active if row[0] not in excluded_ids]
     logger.info("Billing: %d active clients are billable, %d excluded (unlimited)", len(billable_clients), len(excluded_ids))
@@ -132,7 +159,7 @@ async def sync_billing_config(conn: aiosqlite.Connection):
     logger.info("Billing config sync complete")
 
 
-async def generate_billing_flags(conn: aiosqlite.Connection):
+async def generate_billing_flags(conn: aiosqlite.Connection, provider_name: str = ""):
     """Generate billing flags for billable client tickets missing worklogs.
 
     Rules (for clients where track_billing = true):
@@ -145,6 +172,9 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
     from app.config import get_settings
     settings = get_settings()
     now = datetime.now().isoformat()
+    provider_clause, provider_params = _provider_filter(provider_name)
+    # When the query aliases `tickets` as `t` we need `t.provider`, not bare `provider`.
+    t_provider_clause, _ = _provider_filter(provider_name, column="t.provider")
 
     # Date cutoff: only flag tickets created on or after this date
     flags_start = settings.billing.flags_start_date
@@ -155,19 +185,31 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
         date_cutoff_params = [flags_start]
         # Auto-resolve any existing unresolved flags for tickets before the cutoff
         await conn.execute(
-            """UPDATE billing_flags
+            f"""UPDATE billing_flags
                SET resolved = 1, resolved_at = ?, resolution_note = 'Auto-resolved: ticket before billing start date'
                WHERE resolved = 0
-                 AND ticket_id IN (SELECT id FROM tickets WHERE created_time < ?)""",
-            (now, flags_start),
+                 AND ticket_id IN (
+                     SELECT id FROM tickets WHERE created_time < ?{provider_clause}
+                 )""",
+            [now, flags_start, *provider_params],
         )
 
-    # Get billable clients
-    billable = await conn.execute_fetchall(
-        """SELECT client_id, minimum_bill_minutes
-           FROM billing_config
-           WHERE track_billing = 1"""
-    )
+    # Get billable clients scoped to this provider. billing_config has no
+    # provider column, so we join through clients.
+    if provider_name:
+        billable = await conn.execute_fetchall(
+            """SELECT bc.client_id, bc.minimum_bill_minutes
+               FROM billing_config bc
+               JOIN clients c ON bc.client_id = c.id
+               WHERE bc.track_billing = 1 AND c.provider = ?""",
+            [provider_name],
+        )
+    else:
+        billable = await conn.execute_fetchall(
+            """SELECT client_id, minimum_bill_minutes
+               FROM billing_config
+               WHERE track_billing = 1"""
+        )
 
     if not billable:
         return
@@ -228,44 +270,60 @@ async def generate_billing_flags(conn: aiosqlite.Connection):
                         (ticket_id, f"Only {logged}h logged (minimum: {min_minutes}min)", now),
                     )
 
-    # Auto-resolve flags where worklog time has appeared
+    # Auto-resolve flags where worklog time has appeared (scoped to this provider)
     await conn.execute(
-        """UPDATE billing_flags
+        f"""UPDATE billing_flags
            SET resolved = 1, resolved_at = ?, resolution_note = 'Auto-resolved: worklog time added'
            WHERE resolved = 0
              AND flag_type IN ('MISSING_WORKLOG', 'ZERO_TIME')
              AND ticket_id IN (
-                 SELECT id FROM tickets WHERE worklog_hours > 0
+                 SELECT id FROM tickets WHERE worklog_hours > 0{provider_clause}
              )""",
-        (now,),
+        [now, *provider_params],
     )
 
     # Auto-resolve LOW_TIME flags where worklog now meets the minimum
     await conn.execute(
-        """UPDATE billing_flags
+        f"""UPDATE billing_flags
            SET resolved = 1, resolved_at = ?, resolution_note = 'Auto-resolved: worklog time updated above minimum'
            WHERE resolved = 0
              AND flag_type = 'LOW_TIME'
              AND ticket_id IN (
                  SELECT t.id FROM tickets t
                  JOIN billing_config bc ON t.client_id = bc.client_id
-                 WHERE t.worklog_hours >= (bc.minimum_bill_minutes / 60.0)
+                 WHERE t.worklog_hours >= (bc.minimum_bill_minutes / 60.0){t_provider_clause}
              )""",
-        (now,),
+        [now, *provider_params],
     )
 
     # Update stale LOW_TIME flag reasons to reflect current worklog
-    await conn.execute(
-        """UPDATE billing_flags
-           SET flag_reason = 'Only ' || (
-               SELECT t.worklog_hours FROM tickets t WHERE t.id = billing_flags.ticket_id
-           ) || 'h logged (minimum: ' || (
-               SELECT bc.minimum_bill_minutes FROM tickets t2
-               JOIN billing_config bc ON t2.client_id = bc.client_id
-               WHERE t2.id = billing_flags.ticket_id
-           ) || 'min)'
-           WHERE resolved = 0 AND flag_type = 'LOW_TIME'"""
-    )
+    if provider_name:
+        await conn.execute(
+            """UPDATE billing_flags
+               SET flag_reason = 'Only ' || (
+                   SELECT t.worklog_hours FROM tickets t WHERE t.id = billing_flags.ticket_id
+               ) || 'h logged (minimum: ' || (
+                   SELECT bc.minimum_bill_minutes FROM tickets t2
+                   JOIN billing_config bc ON t2.client_id = bc.client_id
+                   WHERE t2.id = billing_flags.ticket_id
+               ) || 'min)'
+               WHERE resolved = 0
+                 AND flag_type = 'LOW_TIME'
+                 AND ticket_id IN (SELECT id FROM tickets WHERE provider = ?)""",
+            [provider_name],
+        )
+    else:
+        await conn.execute(
+            """UPDATE billing_flags
+               SET flag_reason = 'Only ' || (
+                   SELECT t.worklog_hours FROM tickets t WHERE t.id = billing_flags.ticket_id
+               ) || 'h logged (minimum: ' || (
+                   SELECT bc.minimum_bill_minutes FROM tickets t2
+                   JOIN billing_config bc ON t2.client_id = bc.client_id
+                   WHERE t2.id = billing_flags.ticket_id
+               ) || 'min)'
+               WHERE resolved = 0 AND flag_type = 'LOW_TIME'"""
+        )
 
     logger.info("Billing flag generation complete")
 
@@ -382,7 +440,10 @@ async def sync_conversations_for_open_tickets(
 
 
 async def record_mtz_snapshots(conn: aiosqlite.Connection):
-    """Record MTZ card counts for trend sparklines."""
+    """Record MTZ card counts for trend sparklines.
+
+    MTZ is a cross-provider rollup by design, so this hook stays unscoped.
+    """
     try:
         from app.api.routes_mtz import record_mtz_snapshot
         await record_mtz_snapshot(conn)
