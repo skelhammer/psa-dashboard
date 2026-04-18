@@ -23,6 +23,26 @@ Devil's-advocate guidance the plan honors: sequential not parallel integrations,
 - Multi-user or client-tenant authentication (stays single-admin).
 - Go to the public internet (stays LAN-only).
 
+## Progress
+
+Backend test count: 89 → 98 passing. CI pipeline not yet in place; tests run locally only until 0.6 lands.
+
+**Phase 0 — Foundations**
+- [x] 0.2 Provider-scope post-sync hooks — commit `a1973b2`
+- [x] 0.3 Admin-setup race fix — commit `ed524c5`
+- [ ] 0.1 Off-host backup automation
+- [ ] 0.4 Filter context refactor (frontend)
+- [ ] 0.5 BillingProvider + RMMProvider skeletons
+- [ ] 0.6 CI pipeline
+- [ ] 0.7 Real health checks
+- [ ] 0.8 Extract build_where_clause helper
+- [ ] 0.9 Document LAN-only assumption
+
+**Phase 1 — Correlation Layer:** not started
+**Phase 2 — Datto RMM:** not started
+**Phase 3 — QuickBooks Online:** not started
+**Phase 4 — Polish:** not started
+
 ## Phases
 
 Work is sequential. Each phase produces shippable value. Target total calendar is 5-7 months at a realistic solo-dev pace with Claude assistance; compresses to 3-4 months if the owner works on this full-time.
@@ -39,13 +59,13 @@ Work is sequential. Each phase produces shippable value. Target total calendar i
 - Document restore procedure in `deploy/SECRETS-DEPLOYMENT.md`.
 - Current file: none. Risk: single VM failure loses everything.
 
-**0.2 Data-correctness: provider-scope post-sync hooks**
-- `backend/app/sync/hooks.py` currently runs `backfill_resolution_time`, `sync_billing_config`, `generate_billing_flags` globally with no `WHERE provider = ?` clause. When SuperOps syncs after Zendesk, it can overwrite Zendesk state.
-- Change `run_post_sync_hooks(provider)` to pass `provider.get_provider_name()` to each hook and add `AND provider = ?` (or `AND t.provider = ?`) to every mutating query in `hooks.py`.
+**0.2 Data-correctness: provider-scope post-sync hooks** — DONE (`a1973b2`)
+- `backend/app/sync/hooks.py` now threads `provider_name` through `backfill_resolution_time`, `sync_billing_config`, and `generate_billing_flags`; each query that mutates provider-specific rows is scoped via a shared `_provider_filter` helper. MTZ snapshots stay unscoped by design (cross-provider rollup). Empty `provider_name` preserves unscoped behavior for ad-hoc CLI use.
+- Added `backend/tests/test_sync_hooks.py` with 6 tests covering per-provider isolation, unlimited-plan cross-provider edge case, and legacy unscoped behavior.
 
-**0.3 Admin-setup race fix**
-- `backend/app/api/routes_auth.py` `/api/auth/setup` does check-then-create on `any_admin_exists()`. Two concurrent requests can both create admins.
-- Wrap in a single SQLite transaction or add a `UNIQUE(role)` constraint so the second insert fails atomically.
+**0.3 Admin-setup race fix** — DONE (`ed524c5`)
+- Added `create_admin_user_if_none_exists` in `backend/app/auth/users.py` using `INSERT ... SELECT ... WHERE NOT EXISTS` so SQLite evaluates the guard and insert atomically. `/api/auth/setup` keeps the fast-path `any_admin_exists` check to avoid needless bcrypt work, then uses the atomic create as the authoritative guard and returns a clean 403 on race.
+- Added `backend/tests/test_auth_users.py` with 3 tests including an `asyncio.gather` concurrent-setup test confirming exactly one request wins.
 
 **0.4 Filter context refactor (frontend)**
 - `frontend/src/context/FilterContext.tsx` today exposes a single global filter state assuming ticket shape (priority, provider toggle, corp). Datto and QBO pages will have different filter domains.
